@@ -26,7 +26,7 @@ CreateCamera :: proc(orthoSize, aspect, near, far: f32) -> Camera {
 
 // @TODO: actual view matrix...
 GetViewMatrix :: proc(camera: Camera) -> mat4 {
-    view := math.mat4Translate(camera.position)
+    view := math.mat4Translate(-camera.position)
     return view
 }
 
