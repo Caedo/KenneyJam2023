@@ -170,7 +170,7 @@ CreateRenderContext :: proc(window: ^sdl.Window) -> ^dm.RenderContext {
     ctx.CreateRectBatch = CreateRectBatch
     ctx.DrawBatch = DrawBatch
 
-    CreateRectBatch(ctx, &ctx.defaultBatch, 1024)
+    CreateRectBatch(ctx, &ctx.defaultBatch, 4086)
     CreatePrimitiveBatch(ctx, 1024)
 
     constBuffDesc := d3d11.BUFFER_DESC {
@@ -246,6 +246,10 @@ FlushCommands :: proc(using ctx: ^RenderContext_d3d) {
             ctx.deviceContext->VSSetConstantBuffers(0, 1, &ctx.cameraConstBuff)
 
         case dm.DrawRectCommand:
+            if ctx.defaultBatch.count >= ctx.defaultBatch.maxCount {
+                DrawBatch(ctx, &ctx.defaultBatch)
+            }
+
             if ctx.defaultBatch.shader.gen != 0 && 
                ctx.defaultBatch.shader != cmd.shader {
                 DrawBatch(ctx, &ctx.defaultBatch)

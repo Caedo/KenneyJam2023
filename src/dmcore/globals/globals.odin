@@ -8,6 +8,7 @@ input: ^dm.Input
 time: ^dm.TimeData
 renderCtx: ^dm.RenderContext
 audio: ^dm.Audio
+mui: ^dm.Mui
 
 platform: ^dm.Platform
 
@@ -19,4 +20,5 @@ UpdateStatePointer : dm.UpdateStatePointerFunc : proc(platformPtr: ^dm.Platform)
     time      = &platformPtr.time
     renderCtx = platformPtr.renderCtx
     audio     = &platformPtr.audio
+    mui       = platformPtr.mui
 }

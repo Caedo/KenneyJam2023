@@ -14,7 +14,9 @@ gameState: ^GameState
 
 
 GameState :: struct {
+    world: World,
     entities: dm.ResourcePool(Entity),
+    
     atlas: dm.TexHandle,
 
     playerHandle: EntityHandle,
@@ -33,6 +35,15 @@ GameLoad : dm.GameLoad : proc(platform: ^dm.Platform) {
     gameState.atlas = dm.LoadTextureFromFile("assets/atlas.png", globals.renderCtx)
 
     gameState.playerHandle = CreatePlayerEntity()
+
+    gameState.world = CreateWorld()
+
+    gameState.camera.orthoSize = f32(ChunkSize.x * WorldSize.x) / 2
+    gameState.camera.position = {
+        -f32(WorldSize.x * ChunkSize.x) / 2,
+        -f32(WorldSize.y * ChunkSize.y) / 2,
+        -1
+    }
 }
 
 @(export)
@@ -48,6 +59,16 @@ GameUpdate : dm.GameUpdate : proc(state: rawptr) {
         ControlEntity(&e)
     }
 
+    // camera.position.x += dm.GetAxis(globals.input, .A, .D) * globals.time.deltaTime
+    // camera.position.y += dm.GetAxis(globals.input, .S, .W) * globals.time.deltaTime
+
+    if dm.muiBeginWindow(globals.mui, "Gen Text", {0, 0, 100, 70}, nil) {
+        if dm.muiButton(globals.mui, "Step") {
+            GenStep(&gameState.world)
+        }
+
+        dm.muiEndWindow(globals.mui)
+    }
 }
 
 @(export)
@@ -56,6 +77,15 @@ GameRender : dm.GameRender : proc(state: rawptr) {
     dm.ClearColor(globals.renderCtx, {0.1, 0.3, 1, 1})
 
     ctx := globals.renderCtx
+    
+    for chunk in gameState.world.chunks {
+        for tile in chunk.tiles {
+            pos := chunk.offset * ChunkSize + tile.position
+            if tile.genHelper == 1 {
+                dm.DrawSprite(ctx, tile.sprite, dm.v2Conv(pos))
+            }
+        }
+    }
 
     for &e in gameState.entities.elements {
         if dm.IsHandleValid(gameState.entities, auto_cast e.handle) == false {
