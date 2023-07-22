@@ -14,6 +14,7 @@ EntityFlag :: enum {
     HP,
     Pickup,
     Traversable,
+    CanAttack,
 }
 
 ControlerType :: enum {
@@ -86,6 +87,10 @@ CreateEntity :: proc() -> ^Entity {
     return entity
 }
 
+DestroyEntity :: proc(handle: EntityHandle) {
+    dm.FreeSlot(gameState.entities, auto_cast handle)
+} 
+
 ////////////
 
 ControlEntity :: proc(entity: ^Entity) {
@@ -105,6 +110,8 @@ CreatePlayerEntity :: proc() -> ^Entity {
     player.sprite = dm.CreateSprite(gameState.atlas, {0, 0, 16, 16})
     player.tint = PlayerColor
 
+    player.flags = {.HP, .CanAttack, }
+
     player.position = {ChunkSize.x / 2, ChunkSize.y / 2}
 
     return player
@@ -122,10 +129,16 @@ ControlPlayer :: proc(player: ^Entity) {
 
     if deltaMove != {0, 0} {
         targetPos := player.position + deltaMove
-
-        MoveEntityIfPossible(gameState.world, player, targetPos)
-
         player.direction = HeadingFromDir(deltaMove)
+
+        moved, movedTile := MoveEntityIfPossible(gameState.world, player, targetPos)
+        if moved {
+            targetEntity := dm.GetElement(gameState.entities, auto_cast movedTile.traversableEntity)
+            if targetEntity != nil && (.Pickup in targetEntity.flags) {
+                gameState.gold += targetEntity.goldValue
+                DestroyEntity(targetEntity.handle)
+            }
+        }
     }
 
     if dm.GetKeyState(globals.input, .Space) == .JustPressed {
@@ -135,8 +148,10 @@ ControlPlayer :: proc(player: ^Entity) {
 
 ////////////////
 
-CreateGoldPickup :: proc(value: int) -> ^Entity {
+CreateGoldPickup :: proc(world: World, position: dm.iv2, value: int) -> ^Entity {
     gold := CreateEntity()
+
+    gold.position = position
 
     gold.sprite = dm.CreateSprite(gameState.atlas, {5 * 16, 0, 16, 16})
     gold.tint = GoldColor
@@ -144,6 +159,8 @@ CreateGoldPickup :: proc(value: int) -> ^Entity {
     gold.goldValue = value
 
     gold.flags = { .Pickup, .Traversable }
+
+    PutEntityInWorld(world, gold)
 
     return gold
 }

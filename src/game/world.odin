@@ -30,6 +30,8 @@ Tile :: struct {
     indestructible: bool,
     sprite: dm.Sprite,
 
+    containsGold: bool,
+
     traversableEntity: EntityHandle,
     holdedEntity: EntityHandle,
 }
@@ -43,6 +45,11 @@ BotRight :: HeadingsSet{ .North, .West }
 BotLeft  :: HeadingsSet{ .North, .East }
 TopRight :: HeadingsSet{ .South, .West }
 TopLeft  :: HeadingsSet{ .South, .East }
+
+RandRange :: proc(min, max: u32) -> u32 {
+    delta := max - min
+    return min + (rand.uint32() % delta)
+}
 
 InitChunk :: proc(chunk: ^Chunk) {
     chunk.tiles = make([]Tile, ChunkSize.x * ChunkSize.y)
@@ -104,6 +111,20 @@ CreateWorld :: proc() -> (world: World) {
         tileB.indestructible = true
     }
 
+    for chunk in world.chunks {
+        for i in 0..<80 {
+            idx := RandRange(0, cast(u32) len(chunk.tiles))
+            tile := &chunk.tiles[idx]
+
+            if tile.isWall {
+                tile.containsGold = true
+            }
+            else {
+                CreateGoldPickup(world, tile.position, 100)
+            }
+        }
+    }
+
     return
 }
 
@@ -144,6 +165,10 @@ DestroyWallAt :: proc(world: World, worldPos: dm.iv2) -> bool {
 
     if tile.indestructible == false {
         tile.isWall = false
+        if tile.containsGold {
+            CreateGoldPickup(world, tile.position, 100)
+        }
+
         UpdateChunk(world, tile.chunk^)
         
         return true
@@ -248,14 +273,19 @@ PutEntityInWorld :: proc(world: World, entity: ^Entity) {
 
 }
 
-MoveEntityIfPossible :: proc(world: World, entity: ^Entity, targetPos: dm.iv2) {
+MoveEntityIfPossible :: proc(world: World, entity: ^Entity, targetPos: dm.iv2) -> (moved: bool, targetTile: ^Tile) {
     if IsTileOccupied(world, targetPos) == false {
         currentTile := GetWorldTile(world, entity.position)
-        targetTile := GetWorldTile(world, targetPos)
+        targetTile = GetWorldTile(world, targetPos)
 
         currentTile.holdedEntity = {0, 0}
         targetTile.holdedEntity = entity.handle
 
         entity.position = targetPos
+
+        moved = true
+        return
     }
+
+    return
 }

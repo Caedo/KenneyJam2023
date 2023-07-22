@@ -1,4 +1,5 @@
-- indestructible walls around world
+- gold spawning
+- gold pickup
 
 - World Gen:
  = Start position should always be free

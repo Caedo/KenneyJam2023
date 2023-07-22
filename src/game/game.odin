@@ -196,6 +196,9 @@ GetWallColor :: proc(tile: Tile) -> dm.color {
     if tile.indestructible {
         return dm.BLACK
     }
+    else if tile.containsGold {
+        return GoldColor
+    }
     else {
         return WallColor
     }
@@ -223,6 +226,8 @@ GameRender : dm.GameRender : proc(state: rawptr) {
         }
 
         dm.DrawSprite(ctx, e.sprite, dm.v2Conv(e.position), color = e.tint)
-        dm.DrawSprite(ctx, gameState.targetSprite, dm.v2Conv(e.position + Dir(e.direction)))
+        if .CanAttack in e.flags {
+            dm.DrawSprite(ctx, gameState.targetSprite, dm.v2Conv(e.position + Dir(e.direction)))
+        }
     }
 }

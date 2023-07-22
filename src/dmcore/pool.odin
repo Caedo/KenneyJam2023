@@ -77,7 +77,7 @@ FreeSlotAtIndex :: proc(pool: ResourcePool($T), index: int) {
 }
 
 FreeSlotAtHandle :: proc(pool: ResourcePool($T), handle: Handle) {
-    FreeSlotAtIndex(pool, handle.index)
+    FreeSlotAtIndex(pool, cast(int) handle.index)
 }
 
 ClearPool :: proc(pool: ResourcePool($T)) {
