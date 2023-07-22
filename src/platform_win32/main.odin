@@ -110,8 +110,6 @@ main :: proc() {
         time.time = f64(time.ticks) / 1000
         time.gameTime = f64(time.gameTicks) / 1000
 
-
-
         // Input
         for key, state in input.curr {
             input.prev[key] = state
@@ -124,6 +122,7 @@ main :: proc() {
         input.runesCount = 0
         input.scrollX = 0;
         input.scroll = 0;
+        input.mouseDelta = {0, 0}
 
         for e: sdl.Event; sdl.PollEvent(&e); {
             #partial switch e.type {
@@ -149,7 +148,7 @@ main :: proc() {
                 input.mousePos.y = e.motion.y
 
                 input.mouseDelta.x = e.motion.xrel
-                input.mouseDelta.y = e.motion.yrel
+                input.mouseDelta.y = -e.motion.yrel
 
                 // fmt.println("mousePos: ", input.mousePos)
 
@@ -206,6 +205,10 @@ main :: proc() {
         if gameCode.lib != nil {
             if pauseGame == false || moveOneFrame {
                 gameCode.gameUpdate(gameState)
+            }
+
+            if gameCode.gameUpdateDebug != nil {
+                gameCode.gameUpdateDebug(gameState, debugState)
             }
 
             gameCode.gameRender(gameState)

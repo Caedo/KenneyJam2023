@@ -20,8 +20,6 @@ Chunk :: struct {
 }
 
 Tile :: struct {
-    genHelper: u32, // 0 if empty, 1 if occupied
-
     chunk: ^Chunk,
 
     position: dm.iv2,
@@ -29,8 +27,10 @@ Tile :: struct {
 
     neighbours: HeadingsSet,
     isWall: bool,
+    indestructible: bool,
     sprite: dm.Sprite,
 
+    traversableEntity: EntityHandle,
     holdedEntity: EntityHandle,
 }
 
@@ -51,12 +51,11 @@ InitChunk :: proc(chunk: ^Chunk) {
         for x in 0..<ChunkSize.x {
             idx := y * ChunkSize.x + x
 
-            chunk.tiles[idx].genHelper = rand.uint32() % 2
+            chunk.tiles[idx].isWall = (rand.uint32() % 2) == 1
+
             chunk.tiles[idx].sprite    = dm.CreateSprite(gameState.atlas, {0, 32, 16, 16})
             chunk.tiles[idx].localPos  = {x, y}
             chunk.tiles[idx].position  = chunk.offset * ChunkSize + {x, y}
-
-            chunk.tiles[idx].sprite.tint = WallColor
 
             chunk.tiles[idx].chunk = chunk
         }
@@ -79,6 +78,30 @@ CreateWorld :: proc() -> (world: World) {
 
     for step in 0..<GenSteps {
         GenStep(&world)
+    }
+
+    worldSize := WorldSize * ChunkSize
+
+    for x in 0..<worldSize.x {
+        tileA := GetWorldTile(world, {x, 0})
+        tileB := GetWorldTile(world, {x, worldSize.y - 1})
+
+        tileA.isWall = true
+        tileB.isWall = true
+
+        tileA.indestructible = true
+        tileB.indestructible = true
+    }
+
+    for y in 0..<worldSize.y {
+        tileA := GetWorldTile(world, {0, y})
+        tileB := GetWorldTile(world, {worldSize.x - 1, y})
+
+        tileA.isWall = true
+        tileB.isWall = true
+
+        tileA.indestructible = true
+        tileB.indestructible = true
     }
 
     return
@@ -115,12 +138,19 @@ IsTileOccupied :: proc(world: World, worldPos: dm.iv2) -> bool {
     return tile.isWall || validHandle
 }
 
-DestroyWallAt :: proc(world: World, worldPos: dm.iv2) {
+DestroyWallAt :: proc(world: World, worldPos: dm.iv2) -> bool {
     tile := GetWorldTile(world, worldPos)
     assert(tile != nil)
 
-    tile.isWall = false
-    UpdateChunk(world, tile.chunk^)
+    if tile.indestructible == false {
+        tile.isWall = false
+        UpdateChunk(world, tile.chunk^)
+        
+        return true
+    }
+    else {
+        return false
+    }
 }
 
 GetNeighboursCount :: proc(pos: dm.iv2, chunk: Chunk) -> (count: u32) {
@@ -133,7 +163,7 @@ GetNeighboursCount :: proc(pos: dm.iv2, chunk: Chunk) -> (count: u32) {
             }
 
             if IsInsideChunk(neighbour) {
-                count += GetTile(chunk, neighbour).genHelper
+                count += GetTile(chunk, neighbour).isWall ? 1 : 0
             }
             else {
                 count += 1
@@ -155,10 +185,10 @@ GenStep :: proc(world: ^World) {
                 count := GetNeighboursCount({x, y}, chunk)
 
                 if count < 4 {
-                    tile.genHelper = 0
+                    tile.isWall = false
                 }
                 else if count > 4 {
-                    tile.genHelper = 1
+                    tile.isWall = true
                 }
             }
         }
@@ -166,10 +196,6 @@ GenStep :: proc(world: ^World) {
 }
 
 UpdateChunk :: proc(world: World, chunk: Chunk) {
-    for &t in chunk.tiles {
-        t.isWall = t.genHelper == 1
-    }
-
     for &t in chunk.tiles {
         @static checkedDirections:= [?]dm.iv2{
             {1, 0},
@@ -208,6 +234,19 @@ UpdateChunk :: proc(world: World, chunk: Chunk) {
     }
 }
 
+//////////////
+
+PutEntityInWorld :: proc(world: World, entity: ^Entity) {
+    tile := GetWorldTile(world, entity.position)
+
+    if .Traversable in entity.flags {
+        tile.traversableEntity = entity.handle
+    }
+    else {
+        tile.holdedEntity = entity.handle
+    }
+
+}
 
 MoveEntityIfPossible :: proc(world: World, entity: ^Entity, targetPos: dm.iv2) {
     if IsTileOccupied(world, targetPos) == false {

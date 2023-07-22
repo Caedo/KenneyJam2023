@@ -15,6 +15,7 @@ GameCode :: struct {
 
     gameLoad:   dm.GameLoad,
     gameUpdate: dm.GameUpdate,
+    gameUpdateDebug: dm.GameUpdateDebug,
     gameRender: dm.GameRender,
 }
 
@@ -68,6 +69,7 @@ LoadGameCode :: proc(gameCode: ^GameCode, libName: string) -> bool {
     gameCode.gameLoad   = LoadProc(lib, "GameLoad",   dm.GameLoad)
     gameCode.gameUpdate = LoadProc(lib, "GameUpdate", dm.GameUpdate)
     gameCode.gameRender = LoadProc(lib, "GameRender", dm.GameRender)
+    gameCode.gameUpdateDebug = LoadProc(lib, "GameUpdateDebug", dm.GameUpdateDebug)
     gameCode.setStatePointers = LoadProc(lib, "UpdateStatePointer", dm.UpdateStatePointerFunc)
 
     return true

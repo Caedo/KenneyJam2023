@@ -1,0 +1,18 @@
+- indestructible walls around world
+
+- World Gen:
+ = Start position should always be free
+ = gold
+ = Enemies
+ = End room
+ = Room types
+ = foliage
+
+COLORS
+
+- Gameplay:
+ = attack
+ = HP
+ = ENEMIES
+ = eq upgrade
+ = gold

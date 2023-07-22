@@ -15,7 +15,7 @@ ColorGround : dm.color : { 71./255., 45./255., 60./255., 1 }
 PlayerColor : dm.color : dm.WHITE
 EnemyColor  : dm.color : dm.RED
 WallColor   : dm.color : { 207./255., 198./255., 184./255., 1 }
-
+GoldColor   : dm.color : { 244./255., 180./255., 27./255., 1 }
 
 gameState: ^GameState
 
@@ -23,22 +23,29 @@ GameState :: struct {
     world: World,
     entities: dm.ResourcePool(Entity),
 
-    atlas: dm.TexHandle,
-    targetSprite: dm.Sprite,
-
     playerHandle: EntityHandle,
 
     camera: dm.Camera,
 
-    topWallSprite: dm.Sprite,
-    botWallSprite: dm.Sprite,
-    leftWallSprite: dm.Sprite,
-    rightWallSprite: dm.Sprite,
-    topLeftWallSprite: dm.Sprite,
+    /// Assets
+    atlas: dm.TexHandle,
+    targetSprite: dm.Sprite,
+
+    topWallSprite:      dm.Sprite,
+    botWallSprite:      dm.Sprite,
+    leftWallSprite:     dm.Sprite,
+    rightWallSprite:    dm.Sprite,
+    topLeftWallSprite:  dm.Sprite,
     topRightWallSprite: dm.Sprite,
-    botLeftWallSprite: dm.Sprite,
+    botLeftWallSprite:  dm.Sprite,
     botRightWallSprite: dm.Sprite,
-    filledWallSprite: dm.Sprite,
+    filledWallSprite:   dm.Sprite,
+
+    font: dm.Font,
+
+    /////////
+
+    gold: int,
 }
 
 @(export)
@@ -53,7 +60,6 @@ GameLoad : dm.GameLoad : proc(platform: ^dm.Platform) {
     gameState.targetSprite = dm.CreateSprite(gameState.atlas, {16, 0, 16, 16})
 
     wallSprite := dm.CreateSprite(gameState.atlas, {16 * 3, 16, 16, 16})
-    wallSprite.tint = WallColor
 
     gameState.filledWallSprite = wallSprite
 
@@ -88,17 +94,19 @@ GameLoad : dm.GameLoad : proc(platform: ^dm.Platform) {
     //     -1
     // }
 
+    gameState.font = dm.LoadFontSDF(globals.renderCtx, "assets/Kenney Pixel.ttf", 64)
+
 
     ////////////////////////////
 
-    gameState.playerHandle = CreatePlayerEntity()
-
     gameState.world = CreateWorld()
-
     for chunk in gameState.world.chunks {
         UpdateChunk(gameState.world, chunk)
     }
 
+    player := CreatePlayerEntity()
+    gameState.playerHandle = player.handle
+    PutEntityInWorld(gameState.world, player)
 }
 
 @(export)
@@ -110,21 +118,25 @@ GameUpdate : dm.GameUpdate : proc(state: rawptr) {
             continue
         }
 
-
         ControlEntity(&e)
     }
 
 
     player := dm.GetElement(gameState.entities, auto_cast gameState.playerHandle)
-    assert(dm.IsHandleValid(gameState.entities, auto_cast gameState.playerHandle))
+    // assert(dm.IsHandleValid(gameState.entities, auto_cast gameState.playerHandle))
 
     gameState.camera.position.x = cast(f32) player.position.x
     gameState.camera.position.y = cast(f32) player.position.y
     // gameState.camera.position.x += dm.GetAxis(globals.input, .A, .D) * globals.time.deltaTime
     // gameState.camera.position.y += dm.GetAxis(globals.input, .S, .W) * globals.time.deltaTime
+}
 
+@(export)
+GameUpdateDebug : dm.GameUpdateDebug : proc(state: rawptr, debug: bool) {
+    gameState = cast(^GameState) state
 
-    ///////////////////
+    player := dm.GetElement(gameState.entities, auto_cast gameState.playerHandle)
+
     @static selectedTile: ^Tile
     if dm.GetMouseButton(globals.input, .Left) == .JustPressed {
         mousePos := globals.input.mousePos
@@ -137,15 +149,12 @@ GameUpdate : dm.GameUpdate : proc(state: rawptr) {
 
         worldPos := dm.v2{camPos.x, camPos.y} + normPos * {camWidth, -camHeight}
         worldPos = math.round(worldPos)
-        fmt.println(worldPos)
 
-    
         selectedTile = GetWorldTile(gameState.world, {i32(worldPos.x), i32(worldPos.y)})
     }
 
     
-
-    if dm.muiBeginWindow(globals.mui, "Debug", {0, 0, 150, 120}, nil) {
+    if dm.muiBeginWindow(globals.mui, "Game Debug", {globals.renderCtx.frameSize.x - 160, 0, 150, 120}, nil) {
         if dm.muiButton(globals.mui, "Refresh") {
             for chunk in gameState.world.chunks {
                 UpdateChunk(gameState.world, chunk)
@@ -153,12 +162,43 @@ GameUpdate : dm.GameUpdate : proc(state: rawptr) {
         }
 
         if selectedTile != nil {
-            dm.muiLabel(globals.mui, selectedTile)
+            dm.muiLabel(globals.mui, selectedTile.holdedEntity)
+            dm.muiLabel(globals.mui, selectedTile.indestructible)
         }
 
         dm.muiEndWindow(globals.mui)
     }
 
+
+    if player != nil {
+        dm.DrawText(globals.renderCtx, 
+                    fmt.tprint("Health: ", player.HP), 
+                    gameState.font, 
+                    {0, 0}, 32)
+
+        dm.DrawText(globals.renderCtx, 
+                    fmt.tprint("Gold: ", gameState.gold), 
+                    gameState.font, 
+                    {0, 32}, 32)
+    }
+
+    if debug {
+        gameState.camera.orthoSize -= f32(globals.input.scroll)
+
+        if dm.GetMouseButton(globals.input, .Right) == .Down {
+            gameState.camera.position.xy -= cast([2]f32) dm.v2Conv(globals.input.mouseDelta) * 0.1
+        }
+    }
+}
+
+
+GetWallColor :: proc(tile: Tile) -> dm.color {
+    if tile.indestructible {
+        return dm.BLACK
+    }
+    else {
+        return WallColor
+    }
 }
 
 @(export)
@@ -172,7 +212,7 @@ GameRender : dm.GameRender : proc(state: rawptr) {
         for tile in chunk.tiles {
             if tile.isWall {
                 assert(tile.sprite.texture.index != 0)
-                dm.DrawSprite(ctx, tile.sprite, dm.v2Conv(tile.position))
+                dm.DrawSprite(ctx, tile.sprite, dm.v2Conv(tile.position), color = GetWallColor(tile))
             }
         }
     }
@@ -182,7 +222,7 @@ GameRender : dm.GameRender : proc(state: rawptr) {
             continue
         }
 
-        dm.DrawSprite(ctx, e.sprite, dm.v2Conv(e.position))
+        dm.DrawSprite(ctx, e.sprite, dm.v2Conv(e.position), color = e.tint)
         dm.DrawSprite(ctx, gameState.targetSprite, dm.v2Conv(e.position + Dir(e.direction)))
     }
 }

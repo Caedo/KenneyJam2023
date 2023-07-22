@@ -18,6 +18,7 @@ mat4 :: math.mat4
 color :: math.vec4
 
 WHITE   : color : {1, 1, 1, 1}
+BLACK   : color : {0, 0, 0, 1}
 RED     : color : {1, 0, 0, 1}
 GREEN   : color : {0, 1, 0, 1}
 BLUE    : color : {0, 0, 1, 1}
@@ -102,4 +103,5 @@ GameLoad   :: proc(platform: ^Platform)
 GameUpdate :: proc(gameState: rawptr)
 GameRender :: proc(gameState: rawptr)
 GameReload :: proc(gameState: rawptr)
+GameUpdateDebug :: proc(gameState: rawptr, debug: bool)
 UpdateStatePointerFunc :: proc(platformPtr: ^Platform)

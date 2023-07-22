@@ -39,7 +39,8 @@ ClearColor :: proc(ctx: ^RenderContext, color: color) {
     })
 }
 
-DrawSprite :: proc(ctx: ^RenderContext, sprite: Sprite, position: v2, rotation: f32 = 0) {
+DrawSprite :: proc(ctx: ^RenderContext, sprite: Sprite, position: v2, 
+                   rotation: f32 = 0, color := WHITE) {
     cmd: DrawRectCommand
 
     texPos := sprite.atlasPos
@@ -52,7 +53,7 @@ DrawSprite :: proc(ctx: ^RenderContext, sprite: Sprite, position: v2, rotation: 
     cmd.size = size
     cmd.source = {texPos.x, texPos.y, sprite.pixelSize.x, sprite.pixelSize.y}
     cmd.rotation = rotation
-    cmd.tint = sprite.tint
+    cmd.tint = color
     cmd.texture = sprite.texture
     cmd.shader  = ctx.defaultShaders[.Sprite]
 

@@ -60,7 +60,7 @@ DrawText :: proc(ctx: ^RenderContext, str: string, font: Font, position: iv2, fo
     scale := f32(fontSize) / f32(font.size)
 
     posX := 0
-    posY := 0
+    posY := fontSize
 
     fontAtlasSize := v2 {
         cast(f32) atlasSize.x,

@@ -142,7 +142,7 @@ Sprite :: struct {
     atlasPos: iv2,
     pixelSize: iv2,
 
-    tint: color,
+    // tint: color,
 
     scale: f32,
 
@@ -180,7 +180,7 @@ CreateSpriteFromTextureRect :: proc(texture: TexHandle, rect: RectInt) -> Sprite
 
         origin = {0.5, 0.5},
 
-        tint = {1, 1, 1, 1},
+        // tint = {1, 1, 1, 1},
 
         scale = 1,
     }
@@ -195,7 +195,7 @@ CreateSpriteFromTexturePosSize :: proc(texture: TexHandle, atlasPos: iv2, atlasS
 
         origin = {0.5, 0.5},
 
-        tint = {1, 1, 1, 1},
+        // tint = {1, 1, 1, 1},
 
         scale = 1,
     }

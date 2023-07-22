@@ -11,7 +11,9 @@ import "core:math/linalg/glsl"
 EntityHandle :: distinct dm.Handle
 
 EntityFlag :: enum {
-
+    HP,
+    Pickup,
+    Traversable,
 }
 
 ControlerType :: enum {
@@ -35,6 +37,23 @@ DirectionFromHeading := [Heading]dm.iv2 {
     .East  = { 1, 0},
 }
 
+Entity :: struct {
+    handle: EntityHandle, // @TODO: do I need it..?
+    flags: bit_set[EntityFlag],
+
+    controler: ControlerType,
+
+    HP: int,
+
+    goldValue: int,
+
+    position: dm.iv2,
+    direction: Heading,
+
+    sprite: dm.Sprite,
+    tint: dm.color,
+}
+
 Dir :: #force_inline proc(h: Heading) -> dm.iv2 {
     return DirectionFromHeading[h]
 }
@@ -48,18 +67,6 @@ HeadingFromDir :: proc(dir: dm.iv2) -> Heading {
     return .None
 }
 
-Entity :: struct {
-    handle: EntityHandle, // @TODO: do I need it..?
-    flags: bit_set[EntityFlag],
-
-    controler: ControlerType,
-
-    position: dm.iv2,
-    direction: Heading,
-
-    sprite: dm.Sprite,
-    tint: dm.color,
-}
 
 CreateEntityHandle :: proc() -> EntityHandle {
     return cast(EntityHandle) dm.CreateHandle(gameState.entities)
@@ -91,16 +98,16 @@ ControlEntity :: proc(entity: ^Entity) {
 
 ////////////
 
-CreatePlayerEntity :: proc() -> EntityHandle {
+CreatePlayerEntity :: proc() -> ^Entity {
     player := CreateEntity()
 
     player.controler = .Player
     player.sprite = dm.CreateSprite(gameState.atlas, {0, 0, 16, 16})
-    player.sprite.tint = PlayerColor
+    player.tint = PlayerColor
 
     player.position = {ChunkSize.x / 2, ChunkSize.y / 2}
 
-    return player.handle
+    return player
 }
 
 ControlPlayer :: proc(player: ^Entity) {
@@ -122,11 +129,21 @@ ControlPlayer :: proc(player: ^Entity) {
     }
 
     if dm.GetKeyState(globals.input, .Space) == .JustPressed {
-        tile := GetWorldTile(gameState.world, player.position + Dir(player.direction))
-        tile.genHelper = 0
-
-        UpdateChunk(gameState.world, tile.chunk^)
-
-        // DestroyWallAt(gameState.world,  player.position + Dir(player.direction))
+        DestroyWallAt(gameState.world,  player.position + Dir(player.direction))
     }
+}
+
+////////////////
+
+CreateGoldPickup :: proc(value: int) -> ^Entity {
+    gold := CreateEntity()
+
+    gold.sprite = dm.CreateSprite(gameState.atlas, {5 * 16, 0, 16, 16})
+    gold.tint = GoldColor
+
+    gold.goldValue = value
+
+    gold.flags = { .Pickup, .Traversable }
+
+    return gold
 }
