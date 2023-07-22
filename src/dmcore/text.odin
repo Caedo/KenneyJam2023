@@ -97,6 +97,40 @@ DrawText :: proc(ctx: ^RenderContext, str: string, font: Font, position: iv2, fo
     }
 }
 
+MeasureText :: proc(str: string, font: Font, fontSize: int = 0) -> iv2 {
+    fontSize := fontSize
+    if fontSize == 0 do fontSize = font.size
+
+    scale := f32(fontSize) / f32(font.size)
+
+    posX := 0
+    lines := 1
+
+    width := 0
+
+    for c, i in str {
+        if c == '\n' {
+            width = max(width, posX)
+
+            posX = 0
+            lines += 1
+
+            continue
+        }
+
+        index := GetCodepointIndex(c)
+        assert(index != -1)
+
+        glyphData := font.glyphData[index]
+
+        advance := glyphData.pixelWidth if glyphData.pixelWidth != 0 else glyphData.advanceX
+        posX += int(f32(advance) * scale)
+    }
+
+    width = max(width, posX)
+    return {i32(width), i32(lines * fontSize)}
+}
+
 LoadFontSDF :: proc(renderCtx: ^RenderContext, fileName: string, fontSize: int) -> (font: Font) {
     using stbtt
 

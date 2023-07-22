@@ -77,15 +77,15 @@ DrawRect :: proc(ctx: ^RenderContext, texture: TexHandle,
     append(&ctx.commandBuffer.commands, cmd)
 }
 
-DrawRectSimple :: proc(ctx: ^RenderContext, texture: TexHandle, position: v2) {
+DrawRectSimple :: proc(ctx: ^RenderContext, texture: TexHandle, position: v2, color: color = WHITE) {
     cmd: DrawRectCommand
 
-    size :=  GetTextureSize(ctx, texture)
+    texSize :=  GetTextureSize(ctx, texture)
 
     cmd.position = position
-    cmd.size = v2Conv(size)
-    cmd.source = {0, 0, size.x, size.y}
-    cmd.tint = WHITE
+    cmd.size = v2Conv(texSize)
+    cmd.source = {0, 0, texSize.x, texSize.y}
+    cmd.tint = color
 
     cmd.texture = texture
     cmd.shader =  ctx.defaultShaders[.ScreenSpaceRect]
@@ -93,6 +93,21 @@ DrawRectSimple :: proc(ctx: ^RenderContext, texture: TexHandle, position: v2) {
     append(&ctx.commandBuffer.commands, cmd)
 }
 
+DrawRectSize :: proc(ctx: ^RenderContext, texture: TexHandle, position: v2, size: v2, color: color = WHITE) {
+    cmd: DrawRectCommand
+
+    texSize :=  GetTextureSize(ctx, texture)
+
+    cmd.position = position
+    cmd.size = size
+    cmd.source = {0, 0, texSize.x, texSize.y}
+    cmd.tint = color
+
+    cmd.texture = texture
+    cmd.shader =  ctx.defaultShaders[.ScreenSpaceRect]
+
+    append(&ctx.commandBuffer.commands, cmd)
+}
 SetCamera :: proc(ctx: ^RenderContext, camera: Camera) {
     append(&ctx.commandBuffer.commands, CameraCommand{
         camera

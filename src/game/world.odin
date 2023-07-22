@@ -3,6 +3,7 @@ package game
 import dm "../dmcore"
 
 import "core:math/rand"
+import "core:math/linalg/glsl"
 import "core:fmt"
 
 import "core:container/queue"
@@ -23,6 +24,8 @@ World :: struct {
 Chunk :: struct {
     offset: dm.iv2,
     tiles: []Tile,
+
+    isFinal: bool,
 }
 
 Tile :: struct {
@@ -163,6 +166,37 @@ CreateWorld :: proc() -> (world: World) {
             }
             else {
                 CreateGoldPickup(world, tile.position, 100)
+            }
+        }
+    }
+
+
+    // Find final chunk
+    {
+        x := cast(i32) RandRange(0, u32(WorldSize.x))
+        y := i32(RandRange(0, 2)) * (WorldSize.y - 1)
+
+        fmt.println(x, y)
+
+        chunk := GetChunk(world, x, y)
+        chunk.isFinal = true
+
+        startPosX:int = int(ChunkSize.x) / 2
+        startPosY:int = int(ChunkSize.y) / 2
+        radius := 14
+
+        startPos := dm.v2{f32(startPosX), f32(startPosY)}
+
+        gameState.finalChunkCenter = chunk.offset * ChunkSize + ChunkSize / 2
+
+        for y in startPosY-radius..=startPosY+radius {
+            for x in startPosX-radius..=startPosX+radius {
+
+                if glsl.length(dm.v2{f32(x), f32(y)} - startPos) <= f32(radius) {
+                    tile := GetTile(chunk^, dm.iv2{i32(x), i32(y)})
+                    tile.isWall = false
+
+                }
             }
         }
     }
