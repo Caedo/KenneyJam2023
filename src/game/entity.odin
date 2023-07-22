@@ -20,6 +20,7 @@ EntityFlag :: enum {
 ControlerType :: enum {
     None,
     Player,
+    Enemy,
 }
 
 Heading :: enum {
@@ -45,6 +46,7 @@ Entity :: struct {
     controler: ControlerType,
 
     HP: int,
+    detectionRadius: int,
 
     goldValue: int,
 
@@ -89,17 +91,39 @@ CreateEntity :: proc() -> ^Entity {
 
 DestroyEntity :: proc(handle: EntityHandle) {
     dm.FreeSlot(gameState.entities, auto_cast handle)
-} 
+}
+
+DamageEntity :: proc(entity: ^Entity, damage: int) {
+    entity.HP -= damage
+
+    if entity.HP <= 0 {
+        DestroyEntity(entity.handle)
+    }
+}
 
 ////////////
 
 ControlEntity :: proc(entity: ^Entity) {
     switch(entity.controler) {
         case .Player: ControlPlayer(entity)
+        case .Enemy:  ControlEnemy(entity)
         case .None: // ignore
     }
 }
 
+GetFacingEntity :: proc(self: ^Entity) -> ^Entity {
+    pos := self.position + Dir(self.direction)
+    tile := GetWorldTile(gameState.world, pos)
+
+    return dm.GetElement(gameState.entities, auto_cast tile.holdedEntity)
+}
+
+GetFacingEntityHandle :: proc(self: ^Entity) -> EntityHandle {
+    pos := self.position + Dir(self.direction)
+    tile := GetWorldTile(gameState.world, pos)
+
+    return tile.holdedEntity
+}
 
 ////////////
 
@@ -111,6 +135,8 @@ CreatePlayerEntity :: proc() -> ^Entity {
     player.tint = PlayerColor
 
     player.flags = {.HP, .CanAttack, }
+
+    player.HP = 100
 
     player.position = {ChunkSize.x / 2, ChunkSize.y / 2}
 
@@ -139,10 +165,23 @@ ControlPlayer :: proc(player: ^Entity) {
                 DestroyEntity(targetEntity.handle)
             }
         }
+
+        gameState.playerMovedThisFrame = true
     }
 
     if dm.GetKeyState(globals.input, .Space) == .JustPressed {
-        DestroyWallAt(gameState.world,  player.position + Dir(player.direction))
+        tile := GetWorldTile(gameState.world, player.position + Dir(player.direction))
+
+        if tile.isWall {
+            DestroyWallAt(gameState.world,  player.position + Dir(player.direction))
+        }
+
+        entity := dm.GetElement(gameState.entities, auto_cast tile.holdedEntity)
+        if entity != nil && .HP in entity.flags {
+            DamageEntity(entity, 10)
+        }
+
+        gameState.playerMovedThisFrame = true
     }
 }
 
@@ -163,4 +202,62 @@ CreateGoldPickup :: proc(world: World, position: dm.iv2, value: int) -> ^Entity 
     PutEntityInWorld(world, gold)
 
     return gold
+}
+
+/////////////////
+
+CreateEnemy :: proc(world: World, position: dm.iv2) -> ^Entity {
+    enemy := CreateEntity()
+
+    enemy.position = position
+
+    enemy.sprite = dm.CreateSprite(gameState.atlas, {0, 16, 16, 16})
+    enemy.tint = EnemyColor
+
+    enemy.controler = .Enemy
+
+    enemy.detectionRadius = 5
+    enemy.HP = 10
+    // enemy.goldValue = 0
+
+
+    enemy.flags = { .HP, .CanAttack }
+
+    PutEntityInWorld(world, enemy)
+
+    return enemy
+}
+
+ControlEnemy :: proc(enemy: ^Entity) {
+    if gameState.playerMovedLastFrame == false {
+        return
+    }
+
+    player := GetPlayer() 
+    if player == nil {
+        return
+    }
+
+    playerDir := player.position - enemy.position
+    dist := playerDir.x * playerDir.x + playerDir.y * playerDir.y
+
+    if dist != 1 && int(dist) < enemy.detectionRadius * enemy.detectionRadius {
+        dir: dm.iv2
+        if abs(playerDir.x) > abs(playerDir.y) {
+            dir.x = glsl.sign(playerDir.x)
+        }
+        else {
+            dir.y = glsl.sign(playerDir.y)
+        }
+
+        MoveEntityIfPossible(gameState.world, enemy, enemy.position + dir)
+        enemy.direction = HeadingFromDir(dir)
+    }
+
+    if dist == 1 {
+        otherHandle := GetFacingEntityHandle(enemy)
+        if otherHandle == player.handle {
+            DamageEntity(player, 10)            
+        }
+    }
 }

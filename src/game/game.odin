@@ -44,8 +44,14 @@ GameState :: struct {
     font: dm.Font,
 
     /////////
+    playerMovedThisFrame: bool,
+    playerMovedLastFrame: bool,
 
     gold: int,
+}
+
+GetPlayer :: proc() -> ^Entity {
+    return dm.GetElement(gameState.entities, auto_cast gameState.playerHandle)
 }
 
 @(export)
@@ -107,11 +113,15 @@ GameLoad : dm.GameLoad : proc(platform: ^dm.Platform) {
     player := CreatePlayerEntity()
     gameState.playerHandle = player.handle
     PutEntityInWorld(gameState.world, player)
+
+    CreateEnemy(gameState.world, player.position + {4, 4})
 }
 
 @(export)
 GameUpdate : dm.GameUpdate : proc(state: rawptr) {
     gameState = cast(^GameState) state
+
+    gameState.playerMovedThisFrame = false
 
     for &e in gameState.entities.elements {
         if dm.IsHandleValid(gameState.entities, auto_cast e.handle) == false {
@@ -121,14 +131,26 @@ GameUpdate : dm.GameUpdate : proc(state: rawptr) {
         ControlEntity(&e)
     }
 
+    gameState.playerMovedLastFrame = gameState.playerMovedThisFrame
+
 
     player := dm.GetElement(gameState.entities, auto_cast gameState.playerHandle)
     // assert(dm.IsHandleValid(gameState.entities, auto_cast gameState.playerHandle))
 
-    gameState.camera.position.x = cast(f32) player.position.x
-    gameState.camera.position.y = cast(f32) player.position.y
-    // gameState.camera.position.x += dm.GetAxis(globals.input, .A, .D) * globals.time.deltaTime
-    // gameState.camera.position.y += dm.GetAxis(globals.input, .S, .W) * globals.time.deltaTime
+    dm.DrawText(globals.renderCtx, 
+                fmt.tprint("Health: ", player.HP if player != nil else 0), 
+                gameState.font, 
+                {0, 0}, 32)
+
+    dm.DrawText(globals.renderCtx, 
+                fmt.tprint("Gold: ", gameState.gold), 
+                gameState.font, 
+                {0, 32}, 32)
+
+    if player != nil {
+        gameState.camera.position.x = cast(f32) player.position.x
+        gameState.camera.position.y = cast(f32) player.position.y
+    }
 }
 
 @(export)
@@ -167,19 +189,6 @@ GameUpdateDebug : dm.GameUpdateDebug : proc(state: rawptr, debug: bool) {
         }
 
         dm.muiEndWindow(globals.mui)
-    }
-
-
-    if player != nil {
-        dm.DrawText(globals.renderCtx, 
-                    fmt.tprint("Health: ", player.HP), 
-                    gameState.font, 
-                    {0, 0}, 32)
-
-        dm.DrawText(globals.renderCtx, 
-                    fmt.tprint("Gold: ", gameState.gold), 
-                    gameState.font, 
-                    {0, 32}, 32)
     }
 
     if debug {
@@ -227,7 +236,11 @@ GameRender : dm.GameRender : proc(state: rawptr) {
 
         dm.DrawSprite(ctx, e.sprite, dm.v2Conv(e.position), color = e.tint)
         if .CanAttack in e.flags {
-            dm.DrawSprite(ctx, gameState.targetSprite, dm.v2Conv(e.position + Dir(e.direction)))
+            dm.DrawSprite(ctx, gameState.targetSprite, dm.v2Conv(e.position + Dir(e.direction)), color = e.tint)
+        }
+
+        if globals.platform.debugState && e.controler == .Enemy {
+            dm.DrawCircle(globals.renderCtx, dm.v2Conv(e.position), cast(f32) e.detectionRadius, dm.RED)
         }
     }
 }
