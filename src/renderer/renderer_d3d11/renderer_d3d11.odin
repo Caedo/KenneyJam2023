@@ -517,7 +517,7 @@ DrawBatch :: proc(ctx: ^dm.RenderContext, batch: ^dm.RectBatch) {
 
     // @TODO: better texture validation:
     assert(batch.shader.gen != 0)
-    assert(batch.texture.gen != 0)
+    assert(batch.texture.gen != 0, "Rendered batch doesn't have texture set")
     texture := textures.elements[batch.texture.index]
 
     oneOverAtlasSize := [2]f32 {

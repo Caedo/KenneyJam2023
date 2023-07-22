@@ -77,7 +77,7 @@ muiShowWindow :: proc(mui: ^Mui, label: string) {
 }
 
 muiLabel :: proc(using mui: ^Mui, params: ..any) {
-    mu.label(&muiCtx, fmt.tprint(..params))
+    mu.text(&muiCtx, fmt.tprint(..params))
 }
 
 muiSlider :: proc(using mui: ^Mui, value: ^f32, low, high: f32, step: f32 = 0) {

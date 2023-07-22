@@ -96,6 +96,7 @@ CreatePlayerEntity :: proc() -> EntityHandle {
 
     player.controler = .Player
     player.sprite = dm.CreateSprite(gameState.atlas, {0, 0, 16, 16})
+    player.sprite.tint = PlayerColor
 
     player.position = {ChunkSize.x / 2, ChunkSize.y / 2}
 
@@ -112,7 +113,6 @@ ControlPlayer :: proc(player: ^Entity) {
         deltaMove.y = dm.GetAxisInt(globals.input, .Down, .Up, .JustPressed)
     }
 
-    
     if deltaMove != {0, 0} {
         targetPos := player.position + deltaMove
 
@@ -123,6 +123,10 @@ ControlPlayer :: proc(player: ^Entity) {
 
     if dm.GetKeyState(globals.input, .Space) == .JustPressed {
         tile := GetWorldTile(gameState.world, player.position + Dir(player.direction))
-        tile.isWall = false
+        tile.genHelper = 0
+
+        UpdateChunk(gameState.world, tile.chunk^)
+
+        // DestroyWallAt(gameState.world,  player.position + Dir(player.direction))
     }
 }
