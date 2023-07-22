@@ -106,13 +106,10 @@ GameLoad : dm.GameLoad : proc(platform: ^dm.Platform) {
     ////////////////////////////
 
     gameState.world = CreateWorld()
-    for chunk in gameState.world.chunks {
-        UpdateChunk(gameState.world, chunk)
-    }
 
-    player := CreatePlayerEntity()
+
+    player := CreatePlayerEntity(gameState.world)
     gameState.playerHandle = player.handle
-    PutEntityInWorld(gameState.world, player)
 
     CreateEnemy(gameState.world, player.position + {4, 4})
 }
@@ -178,9 +175,10 @@ GameUpdateDebug : dm.GameUpdateDebug : proc(state: rawptr, debug: bool) {
     
     if dm.muiBeginWindow(globals.mui, "Game Debug", {globals.renderCtx.frameSize.x - 160, 0, 150, 120}, nil) {
         if dm.muiButton(globals.mui, "Refresh") {
-            for chunk in gameState.world.chunks {
-                UpdateChunk(gameState.world, chunk)
-            }
+            DestroyWorld(&gameState.world)
+            dm.ClearPool(gameState.entities)
+
+            gameState.world = CreateWorld()
         }
 
         if selectedTile != nil {
@@ -209,7 +207,9 @@ GetWallColor :: proc(tile: Tile) -> dm.color {
         return GoldColor
     }
     else {
-        return WallColor
+        c := WallColor / f32(tile.level + 1)
+        c.a = 1
+        return c
     }
 }
 

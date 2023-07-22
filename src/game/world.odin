@@ -5,13 +5,19 @@ import dm "../dmcore"
 import "core:math/rand"
 import "core:fmt"
 
+import "core:container/queue"
+
 WorldSize :: dm.iv2{5,  5}
 ChunkSize :: dm.iv2{32, 32}
+
+StartChunk :: dm.iv2{2, 2}
 
 GenSteps :: 4
 
 World :: struct {
     chunks: []Chunk,
+
+    nextRegion: int,
 }
 
 Chunk :: struct {
@@ -34,6 +40,10 @@ Tile :: struct {
 
     traversableEntity: EntityHandle,
     holdedEntity: EntityHandle,
+
+    level: int,
+
+    regionNumber: int,
 }
 
 HeadingsSet :: bit_set[Heading]
@@ -54,6 +64,9 @@ RandRange :: proc(min, max: u32) -> u32 {
 InitChunk :: proc(chunk: ^Chunk) {
     chunk.tiles = make([]Tile, ChunkSize.x * ChunkSize.y)
 
+    delta := chunk.offset - StartChunk
+    level := abs(delta.x) + abs(delta.y)
+
     for y in 0..<ChunkSize.y {
         for x in 0..<ChunkSize.x {
             idx := y * ChunkSize.x + x
@@ -64,15 +77,22 @@ InitChunk :: proc(chunk: ^Chunk) {
             chunk.tiles[idx].localPos  = {x, y}
             chunk.tiles[idx].position  = chunk.offset * ChunkSize + {x, y}
 
+            chunk.tiles[idx].level = cast(int) level
+
             chunk.tiles[idx].chunk = chunk
         }
     }
 }
 
+GetChunk :: proc(world: World, x, y: i32) -> ^Chunk {
+    idx := y * WorldSize.x + x
+    return &world.chunks[idx]
+} 
+
 CreateWorld :: proc() -> (world: World) {
     world.chunks = make([]Chunk, WorldSize.x * WorldSize.y)
 
-    rand.set_global_seed(0)
+    // rand.set_global_seed(0)
 
     for &chunk, i in world.chunks {
         chunk.offset = {
@@ -83,12 +103,24 @@ CreateWorld :: proc() -> (world: World) {
         InitChunk(&chunk)
     }
 
+    // Create free space around player spawn
+    chunk := GetChunk(world, StartChunk.x, StartChunk.y)
+    startPos := ChunkSize / 2
+
+    for y in startPos.y-5..=startPos.y+5 {
+        for x in startPos.x-5..=startPos.x+5 {
+            idx := y * ChunkSize.x + x
+            chunk.tiles[idx].isWall = false
+        }
+    }
+
+    // Cellural Automata step
     for step in 0..<GenSteps {
         GenStep(&world)
     }
 
+    // Create wall around world
     worldSize := WorldSize * ChunkSize
-
     for x in 0..<worldSize.x {
         tileA := GetWorldTile(world, {x, 0})
         tileB := GetWorldTile(world, {x, worldSize.y - 1})
@@ -111,6 +143,16 @@ CreateWorld :: proc() -> (world: World) {
         tileB.indestructible = true
     }
 
+    // for chunk in world.chunks {
+    //     for tile in chunk.tiles {
+    //         if tile.regionNumber == 0 {
+    //             FillRegion(&world, tile.position, tile.isWall)
+    //         }
+    //     }
+    // }
+
+
+    // Create gold
     for chunk in world.chunks {
         for i in 0..<80 {
             idx := RandRange(0, cast(u32) len(chunk.tiles))
@@ -125,8 +167,57 @@ CreateWorld :: proc() -> (world: World) {
         }
     }
 
+    for chunk in world.chunks {
+        UpdateChunk(world, chunk)
+    }
+
     return
 }
+
+// FillRegion :: proc(world: ^World, startPos: dm.iv2, wall: bool) {
+//     using queue
+
+//     @static checkedDirections:= [?]dm.iv2{
+//         {1, 0},
+//         {-1, 0},
+//         {0, 1},
+//         {0, -1},
+//     }
+
+//     queue: Queue(dm.iv2)
+//     init(&queue, int(ChunkSize.x * ChunkSize.y), context.temp_allocator)
+
+//     push_back(queue, startPos)
+
+//     for len(queue) > 0 {
+//         pos := pop_front(queue)
+
+//         tile := GetWorldTile(world, pos)
+//         if tile.regionNumber != 0 { 
+//             continue
+//         }
+
+//         tile.regionNumber = world.nextRegion
+
+//         for dir in checkedDirections {
+//             p := pos + dir
+//             if IsInsideWorld(p) && GetWorldTile(world^, p).isWall == wall {
+//                 push_back(queue, p)
+//             }
+//         }
+//     }
+
+//     world.nextRegion += 1
+// }
+
+DestroyWorld :: proc(world: ^World) {
+    for chunk in world.chunks {
+        delete(chunk.tiles)
+    }
+
+    delete(world.chunks)
+}
+
 
 IsInsideChunk :: proc(pos: dm.iv2) -> bool {
     return pos.x >= 0 && pos.x < ChunkSize.x &&

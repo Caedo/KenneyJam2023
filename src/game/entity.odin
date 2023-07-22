@@ -127,18 +127,20 @@ GetFacingEntityHandle :: proc(self: ^Entity) -> EntityHandle {
 
 ////////////
 
-CreatePlayerEntity :: proc() -> ^Entity {
+CreatePlayerEntity :: proc(world: World) -> ^Entity {
     player := CreateEntity()
 
     player.controler = .Player
     player.sprite = dm.CreateSprite(gameState.atlas, {0, 0, 16, 16})
     player.tint = PlayerColor
 
+    player.position = ChunkSize * StartChunk + ChunkSize / 2
+
     player.flags = {.HP, .CanAttack, }
 
     player.HP = 100
 
-    player.position = {ChunkSize.x / 2, ChunkSize.y / 2}
+    PutEntityInWorld(world, player)
 
     return player
 }
