@@ -215,7 +215,7 @@ ControlPlayer :: proc(player: ^Entity) {
         entity := dm.GetElement(gameState.entities, auto_cast tile.holdedEntity)
         if entity != nil && .HP in entity.flags {
             SpawnHitEffect(entity.position, 1, PlayerColor)
-            DamageEntity(entity, 10)
+            DamageEntity(entity, PickaxeDamage())
 
             globals.audio.PlaySound("assets/soundHit.mp3")
         }
@@ -281,7 +281,7 @@ EnemyPresets := [?]EnemyPreset {
         detectionRadius = 5,
     },
     {
-        HP = 20,
+        HP = 15,
         Dmg = 6,
         detectionRadius = 5,
     },
@@ -296,12 +296,12 @@ EnemyPresets := [?]EnemyPreset {
         detectionRadius = 7,
     },
     {
-        HP = 50,
+        HP = 40,
         Dmg = 10,
         detectionRadius = 7,
     },
         {
-        HP = 55,
+        HP = 45,
         Dmg = 10,
         detectionRadius = 7,
     },

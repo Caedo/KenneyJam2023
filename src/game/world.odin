@@ -317,7 +317,7 @@ DestroyWallAt :: proc(world: World, worldPos: dm.iv2) -> bool {
         if tile.containsGold {
             CreateGoldPickup(world, tile.position, GoldPerPickup)
         }
-        else if RandRange(0, 100) < 2 {
+        else if RandRange(0, 100) < 4 {
             CreateHealthPickup(world, tile.position, HealthValue)
         }
 

@@ -436,8 +436,12 @@ DrawWinScreen :: proc() {
 Brave Dwarf!
 You found The Mad King's Treasure!
 
+With all the richness you can buy
+infinite supply of the finest dwarf Ale!
 `
     dm.DrawTextCentered(ctx, draft, gameState.font, {windowSize.x / 2, rectPos.y + 170}, 30)
+    
+    dm.DrawTextCentered(ctx, "Press space to restart", gameState.font, {windowSize.x / 2, rectPos.y + rectSize.y / 2 + 200}, 30)
 }
 
 IsInView :: proc(cameraBounds: dm.Bounds2D, pos, size: dm.iv2) -> bool {

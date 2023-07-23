@@ -53,7 +53,7 @@ main :: proc() {
 
     sdl.SetHintWithPriority(sdl.HINT_RENDER_DRIVER, "direct3d11", .OVERRIDE)
 
-    window = sdl.CreateWindow("DanMofu", sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED, 
+    window = sdl.CreateWindow("Gold and Stone", sdl.WINDOWPOS_CENTERED, sdl.WINDOWPOS_CENTERED, 
                                defaultWindowWidth, defaultWindowHeight,
                                {.ALLOW_HIGHDPI, .HIDDEN})
 
