@@ -97,6 +97,7 @@ DamageEntity :: proc(entity: ^Entity, damage: int) {
     entity.HP -= damage
 
     if entity.HP <= 0 {
+        HandleEntityDeath(entity)
         DestroyEntity(entity.handle)
     }
 }
@@ -104,11 +105,19 @@ DamageEntity :: proc(entity: ^Entity, damage: int) {
 ////////////
 
 ControlEntity :: proc(entity: ^Entity) {
-    switch(entity.controler) {
+    switch entity.controler {
         case .Player: ControlPlayer(entity)
         case .Enemy:  ControlEnemy(entity)
         case .None: // ignore
     }
+}
+
+HandleEntityDeath :: proc(entity: ^Entity) {
+    switch entity.controler {
+        case .Player: HandlePlayerDeath(entity)
+        case .Enemy:  HandleEnemyDeath(entity)
+        case .None: // ignore
+    }   
 }
 
 GetFacingEntity :: proc(self: ^Entity) -> ^Entity {
@@ -175,7 +184,12 @@ ControlPlayer :: proc(player: ^Entity) {
         tile := GetWorldTile(gameState.world, player.position + Dir(player.direction))
 
         if tile.isWall {
-            DestroyWallAt(gameState.world,  player.position + Dir(player.direction))
+            if tile.level <= gameState.pickaxeLevel {
+                DestroyWallAt(gameState.world,  player.position + Dir(player.direction))
+            }
+            else {
+                ShowMessage("Your pickaxe level is to low!");
+            }
         }
 
         entity := dm.GetElement(gameState.entities, auto_cast tile.holdedEntity)
@@ -187,6 +201,10 @@ ControlPlayer :: proc(player: ^Entity) {
     }
 }
 
+HandlePlayerDeath :: proc(entity: ^Entity) {
+    gameState.state = .Dead
+}
+
 ////////////////
 
 CreateGoldPickup :: proc(world: World, position: dm.iv2, value: int) -> ^Entity {
@@ -194,7 +212,7 @@ CreateGoldPickup :: proc(world: World, position: dm.iv2, value: int) -> ^Entity 
 
     gold.position = position
 
-    gold.sprite = dm.CreateSprite(gameState.atlas, {5 * 16, 0, 16, 16})
+    gold.sprite = dm.CreateSprite(gameState.atlas, {2 * 16, 0, 16, 16})
     gold.tint = GoldColor
 
     gold.goldValue = value
@@ -262,4 +280,8 @@ ControlEnemy :: proc(enemy: ^Entity) {
             DamageEntity(player, 10)            
         }
     }
+}
+
+HandleEnemyDeath :: proc(enemy: ^Entity) {
+
 }

@@ -50,6 +50,13 @@ GetCodepointIndex :: proc(codepoint: rune) -> int {
     return int(codepoint) - GLYPH_RANGE_LOW
 }
 
+DrawTextCentered :: proc(ctx: ^RenderContext, str: string, font: Font, position: iv2, fontSize: int = 0) {
+    size := MeasureText(str, font, fontSize)
+    pos := position - size / 2
+
+    DrawText(ctx, str, font, pos, fontSize)
+}
+
 DrawText :: proc(ctx: ^RenderContext, str: string, font: Font, position: iv2, fontSize: int = 0) {
     // @TODO: I can cache atlas size
     atlasSize := GetTextureSize(ctx, font.atlas)

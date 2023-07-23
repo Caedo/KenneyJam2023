@@ -35,8 +35,11 @@ Tile :: struct {
     localPos: dm.iv2,
 
     neighbours: HeadingsSet,
+
     isWall: bool,
     indestructible: bool,
+
+    haveVisual: bool,
     sprite: dm.Sprite,
 
     containsGold: bool,
@@ -76,7 +79,7 @@ InitChunk :: proc(chunk: ^Chunk) {
 
             chunk.tiles[idx].isWall = (rand.uint32() % 2) == 1
 
-            chunk.tiles[idx].sprite    = dm.CreateSprite(gameState.atlas, {0, 32, 16, 16})
+            // chunk.tiles[idx].sprite    = dm.CreateSprite(gameState.atlas, {0, 32, 16, 16})
             chunk.tiles[idx].localPos  = {x, y}
             chunk.tiles[idx].position  = chunk.offset * ChunkSize + {x, y}
 
@@ -196,6 +199,9 @@ CreateWorld :: proc() -> (world: World) {
                     tile := GetTile(chunk^, dm.iv2{i32(x), i32(y)})
                     tile.isWall = false
 
+                    tile.haveVisual = true
+                    idx := RandRange(0, 5)
+                    tile.sprite = dm.CreateSprite(gameState.atlas, {i32(idx) * 16, 3 * 16, 16, 16})
                 }
             }
         }
@@ -347,6 +353,18 @@ GenStep :: proc(world: ^World) {
 
 UpdateChunk :: proc(world: World, chunk: Chunk) {
     for &t in chunk.tiles {
+
+        if t.isWall == false {
+            if(t.haveVisual == false) {
+                t.haveVisual = RandRange(0, 100) < 1
+                if t.haveVisual {
+                    t.sprite = dm.CreateSprite(gameState.atlas, {0, 2 * 16, 16, 16})
+                }
+            }
+
+            continue
+        }
+
         @static checkedDirections:= [?]dm.iv2{
             {1, 0},
             {-1, 0},
@@ -359,6 +377,7 @@ UpdateChunk :: proc(world: World, chunk: Chunk) {
             pos :=  t.position + dir
             // @TODO: probably wont to treat world edge as a wall
             if IsInsideWorld(pos) == false {
+                t.neighbours += { HeadingFromDir(dir) }
                 continue
             }
 

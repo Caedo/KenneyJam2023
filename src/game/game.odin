@@ -10,6 +10,7 @@ import "core:mem"
 
 import globals "../dmcore/globals"
 
+import "core:math/linalg/glsl"
 
 ColorGround : dm.color : { 71./255., 45./255., 60./255., 1 }
 PlayerColor : dm.color : dm.WHITE
@@ -18,6 +19,13 @@ WallColor   : dm.color : { 207./255., 198./255., 184./255., 1 }
 GoldColor   : dm.color : { 244./255., 180./255., 27./255., 1 }
 
 gameState: ^GameState
+
+State :: enum {
+    TitleScreen,
+    Game,
+    Dead,
+    Won,
+}
 
 GameState :: struct {
     world: World,
@@ -44,14 +52,62 @@ GameState :: struct {
     font: dm.Font,
 
     /////////
+    state: State,
+
     playerMovedThisFrame: bool,
     playerMovedLastFrame: bool,
 
+    messageTimer: f32,
+    messageText: string,
+
+    finalChunkCenter: dm.iv2,
+
+    ////////
+
     gold: int,
+    pickaxeLevel: int,
+}
+
+RestartGame :: proc() {
+    DestroyWorld(&gameState.world)
+    dm.ClearPool(gameState.entities)
+
+    StartGame()
+}
+
+StartGame :: proc() {
+    gameState.world = CreateWorld()
+    gameState.state = .TitleScreen
+
+
+    player := CreatePlayerEntity(gameState.world)
+    gameState.playerHandle = player.handle
+    CreateEnemy(gameState.world, player.position + {4, 4})
+
 }
 
 GetPlayer :: proc() -> ^Entity {
     return dm.GetElement(gameState.entities, auto_cast gameState.playerHandle)
+}
+
+ShowMessage :: proc(message: string) {
+    // if gameState.messageText != nil {
+    //     free(gameState.messageText)
+    // }
+
+    gameState.messageTimer = 5
+    gameState.messageText = message
+}
+
+RemoveGold :: proc(gold: int) -> bool {
+    if gameState.gold >= gold {
+        gameState.gold -= gold
+        return true
+    }
+    else {
+        ShowMessage("Not enough gold!")
+        return false
+    } 
 }
 
 @(export)
@@ -65,7 +121,7 @@ GameLoad : dm.GameLoad : proc(platform: ^dm.Platform) {
     gameState.atlas = dm.LoadTextureFromFile("assets/atlas.png", globals.renderCtx)
     gameState.targetSprite = dm.CreateSprite(gameState.atlas, {16, 0, 16, 16})
 
-    wallSprite := dm.CreateSprite(gameState.atlas, {16 * 3, 16, 16, 16})
+    wallSprite := dm.CreateSprite(gameState.atlas, {16 * 6, 16, 16, 16})
 
     gameState.filledWallSprite = wallSprite
 
@@ -93,60 +149,86 @@ GameLoad : dm.GameLoad : proc(platform: ^dm.Platform) {
     wallSprite.atlasPos.y -= 16
     gameState.topRightWallSprite = wallSprite
 
-    // gameState.camera.orthoSize = f32(ChunkSize.x * WorldSize.x) / 2
-    // gameState.camera.position = {
-    //     -f32(WorldSize.x * ChunkSize.x) / 2,
-    //     -f32(WorldSize.y * ChunkSize.y) / 2,
-    //     -1
-    // }
-
     gameState.font = dm.LoadFontSDF(globals.renderCtx, "assets/Kenney Pixel.ttf", 64)
 
 
     ////////////////////////////
 
-    gameState.world = CreateWorld()
-
-
-    player := CreatePlayerEntity(gameState.world)
-    gameState.playerHandle = player.handle
-
-    CreateEnemy(gameState.world, player.position + {4, 4})
+    StartGame()
 }
 
 @(export)
 GameUpdate : dm.GameUpdate : proc(state: rawptr) {
     gameState = cast(^GameState) state
 
-    gameState.playerMovedThisFrame = false
-
-    for &e in gameState.entities.elements {
-        if dm.IsHandleValid(gameState.entities, auto_cast e.handle) == false {
-            continue
+    if gameState.state == .TitleScreen {
+        if dm.GetKeyState(globals.input, .Space) == .JustPressed {
+            gameState.state = .Game
         }
-
-        ControlEntity(&e)
     }
 
-    gameState.playerMovedLastFrame = gameState.playerMovedThisFrame
+    if gameState.state == .Game {
+        gameState.playerMovedThisFrame = false
+        for &e in gameState.entities.elements {
+            if dm.IsHandleValid(gameState.entities, auto_cast e.handle) == false {
+                continue
+            }
+
+            ControlEntity(&e)
+        }
+
+        gameState.playerMovedLastFrame = gameState.playerMovedThisFrame
+    }
+
+    if gameState.state == .Dead {
+        if dm.GetKeyState(globals.input, .Space) == .JustPressed {
+            RestartGame()
+        }
+    }
 
 
     player := dm.GetElement(gameState.entities, auto_cast gameState.playerHandle)
     // assert(dm.IsHandleValid(gameState.entities, auto_cast gameState.playerHandle))
 
-    dm.DrawText(globals.renderCtx, 
-                fmt.tprint("Health: ", player.HP if player != nil else 0), 
-                gameState.font, 
-                {0, 0}, 32)
-
-    dm.DrawText(globals.renderCtx, 
-                fmt.tprint("Gold: ", gameState.gold), 
-                gameState.font, 
-                {0, 32}, 32)
 
     if player != nil {
         gameState.camera.position.x = cast(f32) player.position.x
         gameState.camera.position.y = cast(f32) player.position.y
+
+
+        //// INPUT /////
+
+        if dm.GetKeyState(globals.input, .X) == .JustPressed {
+            dir := gameState.finalChunkCenter - player.position
+
+            if abs(dir.x) > abs(dir.y) {
+                dir.x = glsl.sign(dir.x)
+                dir.y = 0
+            }
+            else {
+                dir.x = 0
+                dir.y = glsl.sign(dir.y)
+            }
+
+            heading := HeadingFromDir(dir)
+
+            message := fmt.aprint("Treasure Room is\nsomewhere", heading)
+            ShowMessage(message)
+        }
+
+        if dm.GetKeyState(globals.input, .Num1) == .JustPressed {
+            if RemoveGold(100) {
+                gameState.pickaxeLevel += 1
+            }
+        }
+    }
+
+    if gameState.messageTimer > 0 {
+        gameState.messageTimer -= globals.time.deltaTime
+
+        if gameState.messageTimer <= 0 {
+            delete(gameState.messageText)
+        }
     }
 }
 
@@ -175,16 +257,15 @@ GameUpdateDebug : dm.GameUpdateDebug : proc(state: rawptr, debug: bool) {
     
     if dm.muiBeginWindow(globals.mui, "Game Debug", {globals.renderCtx.frameSize.x - 160, 0, 150, 120}, nil) {
         if dm.muiButton(globals.mui, "Refresh") {
-            DestroyWorld(&gameState.world)
-            dm.ClearPool(gameState.entities)
-
-            gameState.world = CreateWorld()
+            RestartGame()
         }
 
         if selectedTile != nil {
             dm.muiLabel(globals.mui, selectedTile.holdedEntity)
             dm.muiLabel(globals.mui, selectedTile.indestructible)
         }
+
+        dm.muiLabel(globals.mui, "State:", gameState.state)
 
         dm.muiEndWindow(globals.mui)
     }
@@ -213,6 +294,105 @@ GetWallColor :: proc(tile: Tile) -> dm.color {
     }
 }
 
+DrawTextWithBackground :: proc(text: string, pos: dm.iv2, fontSize: int, centered: bool) {
+    pos := pos
+    size := dm.MeasureText(text, gameState.font, fontSize)
+    
+    if centered {
+        pos -= size / 2
+    }
+
+    ctx := globals.renderCtx
+    dm.DrawRectSize(ctx, ctx.whiteTexture, dm.v2Conv(pos - {2, -2}), dm.v2Conv(size + {4, 4}), {0, 0, 0, 0.75})
+    dm.DrawText(ctx, text, gameState.font, pos, fontSize)
+}
+
+DrawTitleScreen :: proc() {
+    ctx := globals.renderCtx
+
+    windowSize := globals.renderCtx.frameSize
+
+    rectSize := dm.iv2{windowSize.x - 50, windowSize.y - 100}
+    rectPos := windowSize / 2 - rectSize / 2
+
+    dm.DrawRectSize(ctx, ctx.whiteTexture, dm.v2Conv(rectPos), dm.v2Conv(rectSize), {0, 0, 0, .86})
+
+    title := "GOLD and STONE"
+    dm.DrawTextCentered(ctx, title, gameState.font, {windowSize.x / 2, rectPos.y + 30}, 55)
+
+    draft := `
+The legend says, somewhere in this caverns lays 
+The Treasure of The Mad King.
+Many have tried to find it but no one returned.
+You, The Brave Dwarf, took the challange and with 
+help of the Magic Compass,
+wants to find it or something FIX IT LATER
+`
+    dm.DrawTextCentered(ctx, draft, gameState.font, {windowSize.x / 2, rectPos.y + 170}, 30)
+
+    dm.DrawTextCentered(ctx, "Controls:", gameState.font, {windowSize.x / 2, rectPos.y + 300}, 35)
+
+    controlsText :=`
+    Arrows - Move
+    Space - Attack/Dig
+    X - Use Magic Compass
+`
+    dm.DrawTextCentered(ctx, controlsText, gameState.font, {windowSize.x / 2, rectPos.y + 370}, 30)
+}
+
+
+DrawGameUI :: proc() {
+    ctx := globals.renderCtx
+
+    player := dm.GetElement(gameState.entities, auto_cast gameState.playerHandle)
+    DrawTextWithBackground(
+        fmt.tprint("Health:", player.HP if player != nil else 0,
+            "\nGold:", gameState.gold), 
+        {0, 0},
+        32, false,
+    )
+
+    dm.DrawRectSize(ctx, ctx.whiteTexture, {0, 74}, {220, 32 + 26 + 10}, {0, 0, 0, 0.75})
+    dm.DrawText(globals.renderCtx, 
+            fmt.tprint("Pickaxe level:", gameState.pickaxeLevel), 
+            gameState.font,
+            {0, 64 + 10}, 32)
+
+    dm.DrawText(globals.renderCtx, 
+            fmt.tprint("Press '1' to upgrade"), 
+            gameState.font,
+            {0, 64 + 32 + 10}, 26)
+
+    if gameState.messageTimer > 0 {
+        DrawTextWithBackground(gameState.messageText, {400, 500}, 20, true)
+    }
+}
+
+DrawDeadScreen :: proc() {
+    ctx := globals.renderCtx
+
+    windowSize := globals.renderCtx.frameSize
+
+    rectSize := dm.iv2{windowSize.x - 50, windowSize.y - 100}
+    rectPos := windowSize / 2 - rectSize / 2
+
+    dm.DrawRectSize(ctx, ctx.whiteTexture, dm.v2Conv(rectPos), dm.v2Conv(rectSize), {0, 0, 0, .86})
+
+    title := "You have been slain"
+    dm.DrawTextCentered(ctx, title, gameState.font, {windowSize.x / 2, rectPos.y + 30}, 64)
+
+    draft := `
+Your journey ends here Brave Dwarf.
+`
+    dm.DrawTextCentered(ctx, draft, gameState.font, {windowSize.x / 2, rectPos.y + rectSize.y / 2 - 30}, 45)
+
+    dm.DrawTextCentered(ctx, "Press space to restart", gameState.font, {windowSize.x / 2, rectPos.y + rectSize.y / 2 + 100}, 30)
+}
+
+DrawWinScreen :: proc() {
+
+}
+
 @(export)
 GameRender : dm.GameRender : proc(state: rawptr) {
     dm.SetCamera(globals.renderCtx, gameState.camera)
@@ -220,15 +400,18 @@ GameRender : dm.GameRender : proc(state: rawptr) {
 
     ctx := globals.renderCtx
     
+    /// Walls    
     for chunk in gameState.world.chunks {
         for tile in chunk.tiles {
-            if tile.isWall {
+            if tile.isWall || tile.haveVisual {
                 assert(tile.sprite.texture.index != 0)
-                dm.DrawSprite(ctx, tile.sprite, dm.v2Conv(tile.position), color = GetWallColor(tile))
+                color := chunk.isFinal ? GoldColor : GetWallColor(tile)
+                dm.DrawSprite(ctx, tile.sprite, dm.v2Conv(tile.position), color = color)
             }
         }
     }
 
+    /// Entities
     for &e in gameState.entities.elements {
         if dm.IsHandleValid(gameState.entities, auto_cast e.handle) == false {
             continue
@@ -242,5 +425,13 @@ GameRender : dm.GameRender : proc(state: rawptr) {
         if globals.platform.debugState && e.controler == .Enemy {
             dm.DrawCircle(globals.renderCtx, dm.v2Conv(e.position), cast(f32) e.detectionRadius, dm.RED)
         }
+    }
+
+    /// UI
+    switch gameState.state {
+        case .TitleScreen: DrawTitleScreen()
+        case .Game:        DrawGameUI()
+        case .Dead:        DrawDeadScreen()
+        case .Won:         DrawWinScreen()
     }
 }
