@@ -328,6 +328,11 @@ DrawCircle :: proc(ctx: ^RenderContext, pos: v2, radius: f32, color: color = GRE
         posA := GetPosition(i, pos, radius)
         posB := GetPosition(i + 1, pos, radius)
 
+        // @TODO: handle resise or early flush
+        if index >= len(buffer) {
+            return
+        }
+
         buffer[index]     = {posA, color}
         buffer[index + 1] = {posB, color}
         index += 2

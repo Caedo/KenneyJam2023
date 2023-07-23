@@ -14,7 +14,7 @@ import "core:math/linalg/glsl"
 
 ColorGround : dm.color : { 71./255., 45./255., 60./255., 1 }
 PlayerColor : dm.color : dm.WHITE
-EnemyColor  : dm.color : dm.RED
+EnemyColor  : dm.color : {0.98, 0.04, 0.04 , 1}
 WallColor   : dm.color : { 207./255., 198./255., 184./255., 1 }
 GoldColor   : dm.color : { 244./255., 180./255., 27./255., 1 }
 
@@ -57,6 +57,7 @@ GameState :: struct {
     playerMovedThisFrame: bool,
     playerMovedLastFrame: bool,
 
+    messageBuffer: [1024]byte,
     messageTimer: f32,
     messageText: string,
 
@@ -66,6 +67,26 @@ GameState :: struct {
 
     gold: int,
     pickaxeLevel: int,
+}
+
+
+PickaxeDamageTable := [?]int {
+    10, 15, 20, 30, 40
+}
+
+
+PickaxeUpgradeCostTable := [?]int {
+    150, 170, 230, 270, 350,
+}
+
+PickaxeDamage :: proc() -> int {
+    idx := clamp(0, len(PickaxeDamageTable) - 1, gameState.pickaxeLevel)
+    return PickaxeDamageTable[idx]
+}
+
+PickaxeUpgradeCost :: proc() -> int {
+    idx := clamp(0, len(PickaxeUpgradeCostTable) - 1, gameState.pickaxeLevel)
+    return PickaxeUpgradeCostTable[idx]
 }
 
 RestartGame :: proc() {
@@ -82,21 +103,15 @@ StartGame :: proc() {
 
     player := CreatePlayerEntity(gameState.world)
     gameState.playerHandle = player.handle
-    CreateEnemy(gameState.world, player.position + {4, 4})
-
 }
 
 GetPlayer :: proc() -> ^Entity {
     return dm.GetElement(gameState.entities, auto_cast gameState.playerHandle)
 }
 
-ShowMessage :: proc(message: string) {
-    // if gameState.messageText != nil {
-    //     free(gameState.messageText)
-    // }
-
+ShowMessage :: proc(objs: ..any) {
+    gameState.messageText = fmt.bprint(gameState.messageBuffer[:], ..objs)
     gameState.messageTimer = 5
-    gameState.messageText = message
 }
 
 RemoveGold :: proc(gold: int) -> bool {
@@ -108,6 +123,11 @@ RemoveGold :: proc(gold: int) -> bool {
         ShowMessage("Not enough gold!")
         return false
     } 
+}
+
+SqrDist :: proc(a, b: dm.iv2) -> i32 {
+    d := a - b
+    return d.x * d.x + d.y * d.y 
 }
 
 @(export)
@@ -160,6 +180,7 @@ GameLoad : dm.GameLoad : proc(platform: ^dm.Platform) {
 @(export)
 GameUpdate : dm.GameUpdate : proc(state: rawptr) {
     gameState = cast(^GameState) state
+    player := dm.GetElement(gameState.entities, auto_cast gameState.playerHandle)
 
     if gameState.state == .TitleScreen {
         if dm.GetKeyState(globals.input, .Space) == .JustPressed {
@@ -175,19 +196,31 @@ GameUpdate : dm.GameUpdate : proc(state: rawptr) {
             }
 
             ControlEntity(&e)
+
+            if .Lifetime in e.flags {
+                e.lifetime -= globals.time.deltaTime
+
+                if e.lifetime < 0 {
+                    DestroyEntity(e.handle)
+                }
+            }
         }
 
         gameState.playerMovedLastFrame = gameState.playerMovedThisFrame
+
+        delta := dm.v2Conv(player.position - gameState.finalChunkCenter)
+        if  glsl.length(delta) < 10 {
+            gameState.state = .Won
+        } 
     }
 
-    if gameState.state == .Dead {
+    if gameState.state == .Dead || gameState.state == .Won {
         if dm.GetKeyState(globals.input, .Space) == .JustPressed {
             RestartGame()
         }
     }
 
 
-    player := dm.GetElement(gameState.entities, auto_cast gameState.playerHandle)
     // assert(dm.IsHandleValid(gameState.entities, auto_cast gameState.playerHandle))
 
 
@@ -212,12 +245,11 @@ GameUpdate : dm.GameUpdate : proc(state: rawptr) {
 
             heading := HeadingFromDir(dir)
 
-            message := fmt.aprint("Treasure Room is\nsomewhere", heading)
-            ShowMessage(message)
+            ShowMessage("Treasure Room is\nsomewhere", heading)
         }
 
         if dm.GetKeyState(globals.input, .Num1) == .JustPressed {
-            if RemoveGold(100) {
+            if RemoveGold(PickaxeUpgradeCost()) {
                 gameState.pickaxeLevel += 1
             }
         }
@@ -225,10 +257,6 @@ GameUpdate : dm.GameUpdate : proc(state: rawptr) {
 
     if gameState.messageTimer > 0 {
         gameState.messageTimer -= globals.time.deltaTime
-
-        if gameState.messageTimer <= 0 {
-            delete(gameState.messageText)
-        }
     }
 }
 
@@ -262,7 +290,9 @@ GameUpdateDebug : dm.GameUpdateDebug : proc(state: rawptr, debug: bool) {
 
         if selectedTile != nil {
             dm.muiLabel(globals.mui, selectedTile.holdedEntity)
+            dm.muiLabel(globals.mui, selectedTile.traversableEntity)
             dm.muiLabel(globals.mui, selectedTile.indestructible)
+            dm.muiLabel(globals.mui, selectedTile.haveVisual)
         }
 
         dm.muiLabel(globals.mui, "State:", gameState.state)
@@ -325,17 +355,17 @@ The legend says, somewhere in this caverns lays
 The Treasure of The Mad King.
 Many have tried to find it but no one returned.
 You, The Brave Dwarf, took the challange and with 
-help of the Magic Compass,
-wants to find it or something FIX IT LATER
+help of the Magic Compass,you WILL find
+The Treasure!
 `
     dm.DrawTextCentered(ctx, draft, gameState.font, {windowSize.x / 2, rectPos.y + 170}, 30)
 
     dm.DrawTextCentered(ctx, "Controls:", gameState.font, {windowSize.x / 2, rectPos.y + 300}, 35)
 
     controlsText :=`
-    Arrows - Move
-    Space - Attack/Dig
-    X - Use Magic Compass
+Arrows - Move
+Space - Attack/Dig
+X - Use Magic Compass
 `
     dm.DrawTextCentered(ctx, controlsText, gameState.font, {windowSize.x / 2, rectPos.y + 370}, 30)
 }
@@ -352,16 +382,16 @@ DrawGameUI :: proc() {
         32, false,
     )
 
-    dm.DrawRectSize(ctx, ctx.whiteTexture, {0, 74}, {220, 32 + 26 + 10}, {0, 0, 0, 0.75})
+    dm.DrawRectSize(ctx, ctx.whiteTexture, {0, 74}, {220, 90}, {0, 0, 0, 0.75})
     dm.DrawText(globals.renderCtx, 
             fmt.tprint("Pickaxe level:", gameState.pickaxeLevel), 
             gameState.font,
             {0, 64 + 10}, 32)
 
     dm.DrawText(globals.renderCtx, 
-            fmt.tprint("Press '1' to upgrade"), 
+            fmt.tprintf("Damage: %v \nPress '1' to upgrade (%v)", PickaxeDamage(), PickaxeUpgradeCost()), 
             gameState.font,
-            {0, 64 + 32 + 10}, 26)
+            {0, 64 + 32 + 10}, 20)
 
     if gameState.messageTimer > 0 {
         DrawTextWithBackground(gameState.messageText, {400, 500}, 20, true)
@@ -390,7 +420,29 @@ Your journey ends here Brave Dwarf.
 }
 
 DrawWinScreen :: proc() {
+    ctx := globals.renderCtx
 
+    windowSize := globals.renderCtx.frameSize
+
+    rectSize := dm.iv2{windowSize.x - 50, windowSize.y - 100}
+    rectPos := windowSize / 2 - rectSize / 2
+
+    dm.DrawRectSize(ctx, ctx.whiteTexture, dm.v2Conv(rectPos), dm.v2Conv(rectSize), {0, 0, 0, .86})
+
+    // title := "GOLD and STONE"
+    // dm.DrawTextCentered(ctx, title, gameState.font, {windowSize.x / 2, rectPos.y + 30}, 55)
+
+    draft := `
+Brave Dwarf!
+You found The Mad King's Treasure!
+
+`
+    dm.DrawTextCentered(ctx, draft, gameState.font, {windowSize.x / 2, rectPos.y + 170}, 30)
+}
+
+IsInView :: proc(cameraBounds: dm.Bounds2D, pos, size: dm.iv2) -> bool {
+    bounds := dm.CreateBounds(dm.v2Conv(pos), dm.v2Conv(size))
+    return dm.CheckCollisionBounds(cameraBounds, bounds)
 }
 
 @(export)
@@ -399,10 +451,26 @@ GameRender : dm.GameRender : proc(state: rawptr) {
     dm.ClearColor(globals.renderCtx, ColorGround)
 
     ctx := globals.renderCtx
-    
-    /// Walls    
+
+    camPos := gameState.camera.position
+    camHeight := gameState.camera.orthoSize
+    camWidth  := gameState.camera.aspect * camHeight
+    cameraBounds := dm.Bounds2D{
+        camPos.x - camWidth, camPos.x + camWidth,
+        camPos.y - camHeight, camPos.y + camHeight,
+    }
+
+    /// Walls
     for chunk in gameState.world.chunks {
         for tile in chunk.tiles {
+            if IsInView(cameraBounds, tile.position, {1, 1}) == false {
+                continue
+            }
+
+            if tile.neighbours == NotVisible {
+                continue
+            }
+
             if tile.isWall || tile.haveVisual {
                 assert(tile.sprite.texture.index != 0)
                 color := chunk.isFinal ? GoldColor : GetWallColor(tile)
@@ -417,9 +485,16 @@ GameRender : dm.GameRender : proc(state: rawptr) {
             continue
         }
 
+        if IsInView(cameraBounds, e.position, {1, 1}) == false {
+            continue
+        }
+
         dm.DrawSprite(ctx, e.sprite, dm.v2Conv(e.position), color = e.tint)
+
         if .CanAttack in e.flags {
-            dm.DrawSprite(ctx, gameState.targetSprite, dm.v2Conv(e.position + Dir(e.direction)), color = e.tint)
+            c := e.tint
+            c.a = 0.5
+            dm.DrawSprite(ctx, gameState.targetSprite, dm.v2Conv(e.position + Dir(e.direction)), color = c)
         }
 
         if globals.platform.debugState && e.controler == .Enemy {

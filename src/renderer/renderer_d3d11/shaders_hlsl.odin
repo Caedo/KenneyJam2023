@@ -132,8 +132,8 @@ sprite_HLSL :: `
 
         if (color.a == 0) discard;
 
-        float4 c = float4(color.rgb * p.color.rgb, 1);
-        return c;
+        // float4 c = float4(color.rgb * p.color.rgb, color.a);
+        return color * p.color;
     }
 `
 

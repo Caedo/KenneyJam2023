@@ -15,6 +15,8 @@ EntityFlag :: enum {
     Pickup,
     Traversable,
     CanAttack,
+
+    Lifetime,
 }
 
 ControlerType :: enum {
@@ -39,22 +41,31 @@ DirectionFromHeading := [Heading]dm.iv2 {
     .East  = { 1, 0},
 }
 
+PickupType :: enum {
+    Gold, 
+    Health,
+}
+
 Entity :: struct {
     handle: EntityHandle, // @TODO: do I need it..?
     flags: bit_set[EntityFlag],
 
     controler: ControlerType,
 
+    damage: int,
     HP: int,
     detectionRadius: int,
 
-    goldValue: int,
+    pickupType: PickupType,
+    pickupValue: int,
 
     position: dm.iv2,
     direction: Heading,
 
     sprite: dm.Sprite,
     tint: dm.color,
+
+    lifetime: f32,
 }
 
 Dir :: #force_inline proc(h: Heading) -> dm.iv2 {
@@ -171,8 +182,15 @@ ControlPlayer :: proc(player: ^Entity) {
         moved, movedTile := MoveEntityIfPossible(gameState.world, player, targetPos)
         if moved {
             targetEntity := dm.GetElement(gameState.entities, auto_cast movedTile.traversableEntity)
+
             if targetEntity != nil && (.Pickup in targetEntity.flags) {
-                gameState.gold += targetEntity.goldValue
+
+                switch targetEntity.pickupType {
+                    case .Gold: gameState.gold  += targetEntity.pickupValue
+                    case .Health: player.HP += targetEntity.pickupValue 
+                }
+                
+                
                 DestroyEntity(targetEntity.handle)
             }
         }
@@ -185,7 +203,9 @@ ControlPlayer :: proc(player: ^Entity) {
 
         if tile.isWall {
             if tile.level <= gameState.pickaxeLevel {
-                DestroyWallAt(gameState.world,  player.position + Dir(player.direction))
+                pos := player.position + Dir(player.direction)
+                DestroyWallAt(gameState.world, pos)
+                SpawnHitEffect(pos, 2, WallColor)
             }
             else {
                 ShowMessage("Your pickaxe level is to low!");
@@ -194,7 +214,10 @@ ControlPlayer :: proc(player: ^Entity) {
 
         entity := dm.GetElement(gameState.entities, auto_cast tile.holdedEntity)
         if entity != nil && .HP in entity.flags {
+            SpawnHitEffect(entity.position, 1, PlayerColor)
             DamageEntity(entity, 10)
+
+            globals.audio.PlaySound("assets/soundHit.mp3")
         }
 
         gameState.playerMovedThisFrame = true
@@ -215,7 +238,8 @@ CreateGoldPickup :: proc(world: World, position: dm.iv2, value: int) -> ^Entity 
     gold.sprite = dm.CreateSprite(gameState.atlas, {2 * 16, 0, 16, 16})
     gold.tint = GoldColor
 
-    gold.goldValue = value
+    gold.pickupValue = value
+    gold.pickupType = .Gold
 
     gold.flags = { .Pickup, .Traversable }
 
@@ -224,22 +248,84 @@ CreateGoldPickup :: proc(world: World, position: dm.iv2, value: int) -> ^Entity 
     return gold
 }
 
+CreateHealthPickup :: proc(world: World, position: dm.iv2, value: int) -> ^Entity {
+    health := CreateEntity()
+
+    health.position = position
+
+    health.sprite = dm.CreateSprite(gameState.atlas, {0, 16, 16, 16})
+    health.tint = WallColor
+
+    health.pickupValue = value
+    health.pickupType = .Health
+
+    health.flags = { .Pickup, .Traversable }
+
+    PutEntityInWorld(world, health)
+
+    return health
+}
+
+
 /////////////////
 
-CreateEnemy :: proc(world: World, position: dm.iv2) -> ^Entity {
+EnemyPreset :: struct {
+    HP, Dmg: int,
+    detectionRadius: int,
+}
+
+EnemyPresets := [?]EnemyPreset {
+    {
+        HP = 10,
+        Dmg = 5,
+        detectionRadius = 5,
+    },
+    {
+        HP = 20,
+        Dmg = 6,
+        detectionRadius = 5,
+    },
+    {
+        HP = 20,
+        Dmg = 8,
+        detectionRadius = 6,
+    },
+    {
+        HP = 30,
+        Dmg = 10,
+        detectionRadius = 7,
+    },
+    {
+        HP = 50,
+        Dmg = 10,
+        detectionRadius = 7,
+    },
+        {
+        HP = 55,
+        Dmg = 10,
+        detectionRadius = 7,
+    },
+}
+
+GetEnemyPreset :: proc(level: int) -> EnemyPreset {
+    level := clamp(0, len(EnemyPresets) - 1, level)
+    return EnemyPresets[level]
+}
+
+CreateEnemy :: proc(world: World, position: dm.iv2, level: int) -> ^Entity {
     enemy := CreateEntity()
 
     enemy.position = position
 
-    enemy.sprite = dm.CreateSprite(gameState.atlas, {0, 16, 16, 16})
+    enemy.sprite = dm.CreateSprite(gameState.atlas, {16 * i32(level), 5 * 16, 16, 16})
     enemy.tint = EnemyColor
 
     enemy.controler = .Enemy
 
-    enemy.detectionRadius = 5
-    enemy.HP = 10
-    // enemy.goldValue = 0
-
+    preset := GetEnemyPreset(level)
+    enemy.damage = preset.Dmg
+    enemy.detectionRadius = preset.detectionRadius
+    enemy.HP = preset.HP
 
     enemy.flags = { .HP, .CanAttack }
 
@@ -277,11 +363,30 @@ ControlEnemy :: proc(enemy: ^Entity) {
     if dist == 1 {
         otherHandle := GetFacingEntityHandle(enemy)
         if otherHandle == player.handle {
-            DamageEntity(player, 10)            
+            SpawnHitEffect(player.position, 0, EnemyColor)
+            DamageEntity(player, 10)
+
+            globals.audio.PlaySound("assets/soundHitPlayer.mp3")
         }
     }
 }
 
 HandleEnemyDeath :: proc(enemy: ^Entity) {
 
+}
+
+////////////////////////
+
+SpawnHitEffect :: proc(pos: dm.iv2, effectNumber: i32, color: dm.color) {
+    effect := CreateEntity()
+
+    effect.position = pos
+
+    effect.sprite = dm.CreateSprite(gameState.atlas, {effectNumber * 16, 4 * 16, 16, 16})
+    effect.tint = color
+
+    effect.flags = { .Lifetime }
+    effect.lifetime = 0.1
+
+    effect.sprite.scale = 1.2
 }

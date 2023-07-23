@@ -8,12 +8,22 @@ import "core:fmt"
 
 import "core:container/queue"
 
+import globals "../dmcore/globals"
+
 WorldSize :: dm.iv2{5,  5}
 ChunkSize :: dm.iv2{32, 32}
 
 StartChunk :: dm.iv2{2, 2}
 
 GenSteps :: 4
+
+GoldPerRoom :: 60
+GoldPerPickup :: 20
+EnemiesPerRoom :: 8
+
+FinalChunkLevel :: 6
+
+HealthValue :: 10
 
 World :: struct {
     chunks: []Chunk,
@@ -61,6 +71,7 @@ BotRight :: HeadingsSet{ .North, .West }
 BotLeft  :: HeadingsSet{ .North, .East }
 TopRight :: HeadingsSet{ .South, .West }
 TopLeft  :: HeadingsSet{ .South, .East }
+NotVisible :: HeadingsSet{ .South, .East, .North, .West }
 
 RandRange :: proc(min, max: u32) -> u32 {
     delta := max - min
@@ -94,6 +105,11 @@ GetChunk :: proc(world: World, x, y: i32) -> ^Chunk {
     idx := y * WorldSize.x + x
     return &world.chunks[idx]
 } 
+
+GetChunkFromWorldPos :: proc(world: World, x, y: i32) -> ^Chunk  {
+    offset := dm.iv2{x, y} / ChunkSize
+    return GetChunk(world, offset.x, offset.y)
+}
 
 CreateWorld :: proc() -> (world: World) {
     world.chunks = make([]Chunk, WorldSize.x * WorldSize.y)
@@ -149,31 +165,6 @@ CreateWorld :: proc() -> (world: World) {
         tileB.indestructible = true
     }
 
-    // for chunk in world.chunks {
-    //     for tile in chunk.tiles {
-    //         if tile.regionNumber == 0 {
-    //             FillRegion(&world, tile.position, tile.isWall)
-    //         }
-    //     }
-    // }
-
-
-    // Create gold
-    for chunk in world.chunks {
-        for i in 0..<80 {
-            idx := RandRange(0, cast(u32) len(chunk.tiles))
-            tile := &chunk.tiles[idx]
-
-            if tile.isWall {
-                tile.containsGold = true
-            }
-            else {
-                CreateGoldPickup(world, tile.position, 100)
-            }
-        }
-    }
-
-
     // Find final chunk
     {
         x := cast(i32) RandRange(0, u32(WorldSize.x))
@@ -192,6 +183,10 @@ CreateWorld :: proc() -> (world: World) {
 
         gameState.finalChunkCenter = chunk.offset * ChunkSize + ChunkSize / 2
 
+        for &t in chunk.tiles {
+            t.level = FinalChunkLevel
+        }
+
         for y in startPosY-radius..=startPosY+radius {
             for x in startPosX-radius..=startPosX+radius {
 
@@ -207,6 +202,51 @@ CreateWorld :: proc() -> (world: World) {
         }
     }
 
+    // Create gold, enemies and foliage
+    for chunk in world.chunks {
+        if chunk.isFinal {
+            continue
+        }
+
+        for i in 0..<GoldPerRoom {
+            idx := RandRange(0, cast(u32) len(chunk.tiles))
+            tile := &chunk.tiles[idx]
+
+            if tile.isWall {
+                tile.containsGold = true
+            }
+            else {
+                CreateGoldPickup(world, tile.position, GoldPerPickup)
+            }
+        }
+
+        startPos := StartChunk * ChunkSize + ChunkSize / 2
+        emptyTiles := FindEmptyTiles(chunk)
+        for i in 0..<EnemiesPerRoom {
+            idx := RandRange(0, cast(u32) len(emptyTiles))
+            tilePos := emptyTiles[idx]
+
+            if SqrDist(tilePos, startPos) < 10 {
+                continue
+            }
+
+            tile := GetWorldTile(world, tilePos)
+            CreateEnemy(world, tilePos, tile.level)
+
+            unordered_remove(&emptyTiles, cast(int) idx)
+        }
+
+        for &t in chunk.tiles {
+            if t.isWall == false && t.haveVisual == false {
+                t.haveVisual = RandRange(0, 100) < 1
+                if t.haveVisual {
+                    t.sprite = dm.CreateSprite(gameState.atlas, {0, 2 * 16, 16, 16})
+                }
+            }
+        }
+    }
+
+
     for chunk in world.chunks {
         UpdateChunk(world, chunk)
     }
@@ -214,41 +254,17 @@ CreateWorld :: proc() -> (world: World) {
     return
 }
 
-// FillRegion :: proc(world: ^World, startPos: dm.iv2, wall: bool) {
-//     using queue
+FindEmptyTiles :: proc(chunk: Chunk) -> [dynamic]dm.iv2 {
+    tiles := make([dynamic]dm.iv2, 0, (ChunkSize.x * ChunkSize.y) / 2, context.temp_allocator)
 
-//     @static checkedDirections:= [?]dm.iv2{
-//         {1, 0},
-//         {-1, 0},
-//         {0, 1},
-//         {0, -1},
-//     }
+    for t in chunk.tiles {
+        if t.isWall == false {
+            append(&tiles, t.position)
+        }
+    }
 
-//     queue: Queue(dm.iv2)
-//     init(&queue, int(ChunkSize.x * ChunkSize.y), context.temp_allocator)
-
-//     push_back(queue, startPos)
-
-//     for len(queue) > 0 {
-//         pos := pop_front(queue)
-
-//         tile := GetWorldTile(world, pos)
-//         if tile.regionNumber != 0 { 
-//             continue
-//         }
-
-//         tile.regionNumber = world.nextRegion
-
-//         for dir in checkedDirections {
-//             p := pos + dir
-//             if IsInsideWorld(p) && GetWorldTile(world^, p).isWall == wall {
-//                 push_back(queue, p)
-//             }
-//         }
-//     }
-
-//     world.nextRegion += 1
-// }
+    return tiles
+}
 
 DestroyWorld :: proc(world: ^World) {
     for chunk in world.chunks {
@@ -294,14 +310,47 @@ DestroyWallAt :: proc(world: World, worldPos: dm.iv2) -> bool {
     tile := GetWorldTile(world, worldPos)
     assert(tile != nil)
 
+    globals.audio.PlaySound("assets/soundMine.mp3")
+
     if tile.indestructible == false {
         tile.isWall = false
         if tile.containsGold {
-            CreateGoldPickup(world, tile.position, 100)
+            CreateGoldPickup(world, tile.position, GoldPerPickup)
+        }
+        else if RandRange(0, 100) < 2 {
+            CreateHealthPickup(world, tile.position, HealthValue)
         }
 
         UpdateChunk(world, tile.chunk^)
+
+        updateOtherChunk := false
+        otherPos: dm.iv2
+
+        if tile.localPos.x == 0 {
+            otherPos = dm.iv2{worldPos.x - 1, worldPos.y}
+            updateOtherChunk = true
+        }
         
+        if tile.localPos.x == ChunkSize.x - 1 {
+            otherPos = dm.iv2{worldPos.x + 1, worldPos.y}
+            updateOtherChunk = true
+        }
+
+        if tile.localPos.y == 0 {
+            otherPos = dm.iv2{worldPos.x, worldPos.y - 1}
+            updateOtherChunk = true
+        }
+
+        if tile.localPos.y == ChunkSize.y - 1 {
+            otherPos = dm.iv2{worldPos.x, worldPos.y + 1}
+            updateOtherChunk = true
+        }
+
+        if updateOtherChunk && IsInsideWorld(otherPos) {
+            chunk := GetChunkFromWorldPos(world, otherPos.x, otherPos.y)
+            UpdateChunk(world, chunk^)
+        }
+
         return true
     }
     else {
@@ -353,15 +402,7 @@ GenStep :: proc(world: ^World) {
 
 UpdateChunk :: proc(world: World, chunk: Chunk) {
     for &t in chunk.tiles {
-
         if t.isWall == false {
-            if(t.haveVisual == false) {
-                t.haveVisual = RandRange(0, 100) < 1
-                if t.haveVisual {
-                    t.sprite = dm.CreateSprite(gameState.atlas, {0, 2 * 16, 16, 16})
-                }
-            }
-
             continue
         }
 
@@ -433,3 +474,7 @@ MoveEntityIfPossible :: proc(world: World, entity: ^Entity, targetPos: dm.iv2) -
 
     return
 }
+
+// FindPath :: proc(start: dm.iv2, end: dm.iv2) -> []dm.iv2 {
+    
+// }

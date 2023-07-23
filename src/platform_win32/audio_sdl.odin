@@ -15,6 +15,8 @@ musicMap: map[string]^mixer.Music
 sounds: map[string]SoundData
 
 InitAudio :: proc() -> dm.Audio {
+    mixer.Init({.MP3, .OGG})
+
     if mixer.OpenAudio(44100, mixer.DEFAULT_FORMAT, 2, 2048) < 0 {
         fmt.println("Can't initialize audio")
     }

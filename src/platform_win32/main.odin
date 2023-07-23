@@ -176,30 +176,32 @@ main :: proc() {
         dm.muiProcessInput(engineData.mui, &input)
         dm.muiBegin(engineData.mui)
 
-        if dm.GetKeyState(&input, .U) == .JustPressed {
-            debugState = !debugState
-            pauseGame = debugState
+        when ODIN_DEBUG {
+            if dm.GetKeyState(&input, .U) == .JustPressed {
+                debugState = !debugState
+                pauseGame = debugState
 
-            if debugState {
-                dm.muiShowWindow(mui, "Debug")
-            }
-        }
-
-        if debugState && dm.muiBeginWindow(mui, "Debug", {0, 0, 100, 240}, nil) {
-            dm.muiLabel(mui, "Time:", time.time)
-            dm.muiLabel(mui, "GameTime:", time.gameTime)
-
-            dm.muiLabel(mui, "Frame:", time.frame)
-
-            if dm.muiButton(mui, "Play" if pauseGame else "Pause") {
-                pauseGame = !pauseGame
+                if debugState {
+                    dm.muiShowWindow(mui, "Debug")
+                }
             }
 
-            if dm.muiButton(mui, ">") {
-                moveOneFrame = true
-            }
+            if debugState && dm.muiBeginWindow(mui, "Debug", {0, 0, 100, 240}, nil) {
+                dm.muiLabel(mui, "Time:", time.time)
+                dm.muiLabel(mui, "GameTime:", time.gameTime)
 
-            dm.muiEndWindow(mui)
+                dm.muiLabel(mui, "Frame:", time.frame)
+
+                if dm.muiButton(mui, "Play" if pauseGame else "Pause") {
+                    pauseGame = !pauseGame
+                }
+
+                if dm.muiButton(mui, ">") {
+                    moveOneFrame = true
+                }
+
+                dm.muiEndWindow(mui)
+            }
         }
 
         if gameCode.lib != nil {
@@ -207,8 +209,10 @@ main :: proc() {
                 gameCode.gameUpdate(gameState)
             }
 
-            if gameCode.gameUpdateDebug != nil {
-                gameCode.gameUpdateDebug(gameState, debugState)
+            when ODIN_DEBUG {
+                if gameCode.gameUpdateDebug != nil {
+                    gameCode.gameUpdateDebug(gameState, debugState)
+                }
             }
 
             gameCode.gameRender(gameState)
